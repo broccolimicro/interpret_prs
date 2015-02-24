@@ -12,14 +12,7 @@ prs::production_rule import_production_rule(tokenizer &tokens, const parse_prs::
 {
 	prs::production_rule result;
 	result.guard = import_cover(tokens, syntax.implicant, variables, auto_define);
-
-	for (int i = 0; i < (int)syntax.actions.size(); i++)
-	{
-		result.action.cubes.push_back(boolean::cube(1));
-		for (int j = 0; j < (int)syntax.actions[i].size(); j++)
-			result.action.cubes[j] &= import_cube(tokens, syntax.actions[i][j], variables, auto_define);
-	}
-
+	result.action = import_cover(tokens, syntax.action, variables, auto_define);
 	return result;
 }
 

@@ -12,8 +12,8 @@ parse_prs::production_rule export_production_rule(const prs::production_rule &pr
 {
 	parse_prs::production_rule result;
 	result.valid = true;
-	result.implicant = export_guard(pr.guard, variables);
-	result.actions = export_assignments(pr.action, variables);
+	result.implicant = export_disjunction(pr.guard, variables);
+	result.action = export_internal_choice(pr.action, variables);
 	return result;
 }
 
