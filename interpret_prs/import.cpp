@@ -26,5 +26,11 @@ prs::production_rule_set import_production_rule_set(const parse_prs::production_
 	for (int i = 0; i < (int)syntax.rules.size(); i++)
 		result.rules.push_back(import_production_rule(syntax.rules[i], variables, default_id, tokens, auto_define));
 
+	for (int i = 0; i < (int)syntax.regions.size(); i++)
+	{
+		prs::production_rule_set temp = import_production_rule_set(syntax.regions[i], variables, default_id, tokens, auto_define);
+		result.rules.insert(result.rules.end(), temp.rules.begin(), temp.rules.end());
+	}
+
 	return result;
 }
