@@ -8,7 +8,7 @@
 #include "import.h"
 #include <interpret_boolean/import.h>
 
-prs::production_rule import_production_rule(const parse_prs::production_rule &syntax, boolean::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
+prs::production_rule import_production_rule(const parse_prs::production_rule &syntax, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
 {
 	prs::production_rule result;
 	result.guard = import_cover(syntax.implicant, variables, default_id, tokens, auto_define);
@@ -16,7 +16,7 @@ prs::production_rule import_production_rule(const parse_prs::production_rule &sy
 	return result;
 }
 
-prs::production_rule_set import_production_rule_set(const parse_prs::production_rule_set &syntax, boolean::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
+prs::production_rule_set import_production_rule_set(const parse_prs::production_rule_set &syntax, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
 {
 	prs::production_rule_set result;
 
