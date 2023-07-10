@@ -45,6 +45,9 @@ parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &
 		parse_dot::assignment &a = attr.as.back();
 		a.first = "label";
 		a.second = variables.nodes[i].to_string();
+		if (bub.inverted[i]) {
+			a.second = "_" + a.second;
+		}
 	}
 
 	for (auto i = bub.net.begin(); i != bub.net.end(); i++)
