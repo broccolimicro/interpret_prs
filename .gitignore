@@ -2,4 +2,5 @@
 *.a
 *.so
 *.d
-test_interpret_prs
+test
+build
