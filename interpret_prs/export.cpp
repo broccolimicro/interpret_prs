@@ -9,6 +9,8 @@
 #include <interpret_boolean/export.h>
 #include <parse_dot/node_id.h>
 
+namespace prs {
+
 parse_prs::production_rule export_production_rule(const prs::production_rule &pr, ucs::variable_set &variables)
 {
 	parse_prs::production_rule result;
@@ -88,5 +90,7 @@ void export_devices(parse_spice::subckt &ckt, const prs::production_rule &pr, uc
 }
 
 parse_spice::subckt export_subckt(const prs::production_rule_set &prs, ucs::variable_set &variables) {
+
+}
 
 }
