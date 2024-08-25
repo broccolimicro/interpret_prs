@@ -13,6 +13,9 @@ namespace prs {
 prs::production_rule import_production_rule(const parse_prs::production_rule &syntax, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
 {
 	prs::production_rule result;
+	if (syntax.assume.valid) {
+		result.assume = import_cover(syntax.assume, variables, default_id, tokens, auto_define);
+	}
 	result.guard = import_cover(syntax.implicant, variables, default_id, tokens, auto_define);
 	result.local_action = import_cover(syntax.action, variables, default_id, tokens, auto_define);
 	return result;

@@ -15,6 +15,9 @@ parse_prs::production_rule export_production_rule(const prs::production_rule &pr
 {
 	parse_prs::production_rule result;
 	result.valid = true;
+	if (not pr.assume.is_tautology()) {
+		result.assume = export_expression_xfactor(pr.assume, variables);
+	}
 	result.implicant = export_expression_xfactor(pr.guard, variables);
 	result.action = export_composition(pr.local_action, variables);
 	return result;
