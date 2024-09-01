@@ -20,12 +20,10 @@
 
 namespace prs {
 
-parse_prs::production_rule export_production_rule(const prs::production_rule &pr, ucs::variable_set &variables);
-parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &prs, ucs::variable_set &variables);
+parse_expression::expression export_guard(const prs::production_rule_set &pr, int net, int threshold, ucs::variable_set &variables, vector<int> &next, vector<int> &covered);
+parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, int net, int value, ucs::variable_set &variables, vector<int> &next, vector<int> &covered);
+parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, ucs::variable_set &variables);
 
-parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &variables);
-
-void export_devices(parse_spice::subckt &ckt, const prs::production_rule &pr, ucs::variable_set &variables);
-parse_spice::subckt export_subckt(const prs::production_rule_set &prs, ucs::variable_set &variables);
+//parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &variables);
 
 }

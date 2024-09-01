@@ -12,7 +12,7 @@
 
 namespace prs {
 
-prs::production_rule import_production_rule(const parse_prs::production_rule &syntax, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define);
-prs::production_rule_set import_production_rule_set(const parse_prs::production_rule_set &syntax, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define);
+void import_production_rule(const parse_prs::production_rule &syntax, prs::production_rule_set &pr, int vdd, int gnd, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define);
+void import_production_rule_set(const parse_prs::production_rule_set &syntax, prs::production_rule_set &pr, int vdd, int gnd, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define);
 
 }
