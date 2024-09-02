@@ -11,34 +11,13 @@
 
 namespace prs {
 
-parse_expression::expression export_guard(const prs::production_rule_set &pr, int net, int threshold, ucs::variable_set &variables, vector<int> &next, vector<int> &covered) {
-	static int AND = parse_expression::expression::get_level("&");
-	static int OR = parse_expression::expression::get_level("|");
-	static int NOT = parse_expression::expression::get_level("~");
-
-	cout << "creating production rule for " << export_variable_name(net, variables).to_string() << endl;
-
-	parse_expression::expression result;
+parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int threshold, ucs::variable_set &variables, vector<int> &next, vector<int> &covered) {
+	parse_prs::guard result;
 	result.valid = true;
-	vector<pair<int, parse_expression::expression*> > stack;
-	for (int i = 0; i < (int)pr.at(net).drainOf[threshold].size(); i++) {
-		stack.push_back(pair<int, parse_expression::expression*>(pr.at(net).drainOf[threshold][i], nullptr));
-	}
-
-	if (stack.size() == 1) {
-		stack.back().second = &result;
-		result.level = AND;
-	} else {
-		result.arguments.reserve(stack.size()*2);
-		for (int i = 0; i < (int)stack.size(); i++) {
-			result.arguments.push_back(parse_expression::argument(parse_expression::expression()));
-			result.arguments[i].sub.valid = true;
-			result.arguments[i].sub.level = AND;
-			stack[i].second = &result.arguments[i].sub;
-		}
-		result.level = OR;
-	}
-	// device -> elements in stack at device
+	result.level = parse_prs::guard::AND;
+	vector<pair<int, parse_prs::guard*> > stack(1, pair<int, parse_prs::guard*>(drain, &result));
+	
+	// net -> elements in stack at net
 	map<int, vector<int> > merge;
 	bool step = true;
 	while (not stack.empty() and step) {
@@ -55,71 +34,76 @@ parse_expression::expression export_guard(const prs::production_rule_set &pr, in
 		// test in step 1.
 		vector<int> toErase;
 		for (auto i = merge.begin(); i != merge.end(); i++) {
-			if (i->second.size() >= pr.at(pr.devs[i->first].drain).sourceOf[threshold].size()) {
+			if (i->second.size() >= pr.at(i->first).sourceOf[threshold].size()) {
 				// Do the merge
 				if (i->second.size() > 1) {
-					parse_expression::expression para;
+					parse_prs::guard para;
 					para.valid = true;
-					para.level = OR;
-					para.arguments.reserve(i->second.size()*2);
+					para.level = parse_prs::guard::OR;
+					para.terms.reserve(i->second.size()*2);
 					for (auto j = i->second.begin(); j != i->second.end(); j++) {
-						para.arguments.push_back(parse_expression::argument(*stack[*j].second));
+						para.terms.push_back(parse_prs::term(*stack[*j].second));
 						stack[*j].second->valid = false;
 						toErase.push_back(*j);
 					}
 
-					parse_expression::expression seq;
+					parse_prs::guard seq;
 					seq.valid = true;
-					seq.level = AND;
-					seq.arguments.push_back(parse_expression::argument(para));
+					seq.level = parse_prs::guard::AND;
+					seq.terms.push_back(parse_prs::term(para));
 
 					*stack[i->second[0]].second = seq;
 					i->second.resize(1);
 				}
 
 				int idx = i->second[0];
-				int dev = stack[idx].first;
-				covered.push_back(dev);
+				int net = i->first;
+				covered.push_back(net);
 
-				// add this literal
-				parse_expression::argument arg(export_variable_name(pr.devs[dev].gate, variables));
-
-				if (pr.devs[dev].threshold == 0) {
-					parse_expression::expression sub;
-					sub.valid = true;
-					sub.operations.push_back("~");
-					sub.level = NOT;
-					sub.arguments.push_back(arg);
-					arg = parse_expression::argument(sub);
+				// Handle precharge
+				if (net != drain and not stack[idx].second->terms.empty() and not pr.at(net).drainOf[1-threshold].empty()) {
+					stack[idx].second->terms[0].pchg = export_guard(pr, net, 1-threshold, variables, next, covered);
 				}
 
-				cout << "found " << arg.to_string() << endl;
-
-				stack[idx].second->arguments.insert(stack[idx].second->arguments.begin(), arg);
-
 				// Do the split
-				int net = pr.devs[dev].source;
 				if (pr.at(net).drainOf[threshold].size() > 1) {
-					stack[idx].second->arguments.insert(stack[idx].second->arguments.begin(), parse_expression::argument(parse_expression::expression()));
-					parse_expression::expression *sub = &stack[idx].second->arguments[0].sub;
+					stack[idx].second->terms.insert(stack[idx].second->terms.begin(), parse_prs::term(parse_prs::guard()));
+					parse_prs::guard *sub = &stack[idx].second->terms[0].sub;
 					sub->valid = true;
-					sub->level = OR;
-					sub->arguments.reserve(pr.at(net).drainOf[threshold].size()*2);
-					for (int j = 0; j < (int)pr.at(net).drainOf[threshold].size(); j++) {
-						sub->arguments.push_back(parse_expression::argument(parse_expression::expression()));
-						parse_expression::expression *subj = &sub->arguments.back().sub;
+					sub->level = parse_prs::guard::OR;
+					sub->terms.reserve(pr.at(net).drainOf[threshold].size()*2);
+					for (int j = (int)pr.at(net).drainOf[threshold].size()-1; j >= 0; j--) {
+						int dev = pr.at(net).drainOf[threshold][j];
+
+						sub->terms.push_back(parse_prs::term(parse_prs::guard()));
+						parse_prs::guard *subj = &sub->terms.back().sub;
 						subj->valid = true;
-						subj->level = AND;
+						subj->level = parse_prs::guard::AND;
+
+						// add this literal
+						parse_prs::term arg(parse_prs::literal(export_variable_name(pr.devs[dev].gate, variables), pr.devs[dev].threshold == 0));
+
+						subj->terms.insert(subj->terms.begin(), arg);
+
 						if (j != 0) {
-							stack.push_back(pair<int, parse_expression::expression*>(pr.at(net).drainOf[threshold][j], subj));
+							stack.push_back(pair<int, parse_prs::guard*>(pr.devs[dev].source, subj));
 						} else {
 							stack[idx].second = subj;
-							stack[idx].first = pr.at(net).drainOf[threshold][j];
+							stack[idx].first = pr.devs[dev].source;
 						}
 					}
 				} else if (not pr.at(net).drainOf[threshold].empty()) {
-					stack[idx].first = pr.at(net).drainOf[threshold].back();
+					int dev = pr.at(net).drainOf[threshold].back();
+
+					// add this literal
+					parse_prs::term arg(parse_prs::literal(export_variable_name(pr.devs[dev].gate, variables), pr.devs[dev].threshold == 0));
+
+					stack[idx].second->terms.insert(stack[idx].second->terms.begin(), arg);
+
+					stack[idx].first = pr.devs[dev].source;
 				} else {
+					parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].first, variables), false, false));
+					stack[idx].second->terms.insert(stack[idx].second->terms.begin(), arg);
 					toErase.push_back(idx);
 				}
 				
@@ -137,74 +121,49 @@ parse_expression::expression export_guard(const prs::production_rule_set &pr, in
 		}
 	}
 
-
 	//   a. if none of the items in the stack pass the test, then we
 	//   stop here and those nodes become virtual nodes.
 	for (auto i = stack.begin(); i != stack.end(); i++) {
-		if (find(covered.begin(), covered.end(), pr.devs[i->first].drain) == covered.end()) {
-			next.push_back(pr.devs[i->first].drain);
+		parse_prs::term arg(parse_prs::literal(export_variable_name(i->first, variables), false, false));
+		i->second->terms.insert(i->second->terms.begin(), arg);
+
+		if (find(covered.begin(), covered.end(), i->first) == covered.end()) {
+			next.push_back(i->first);
 		}
 	}
 	sort(next.begin(), next.end());
 	next.erase(unique(next.begin(), next.end()), next.end());
 
-	stack.clear();
-	stack.push_back(pair<int, parse_expression::expression*>(-1, &result));
-	while (not stack.empty()) {
-		auto curr = stack.back().second;
-		stack.pop_back();
-
-		for (int i = 0; i < (int)curr->arguments.size(); i++) {
-			if (i != 0 and (curr->level == OR or curr->level == AND)) {
-				curr->operations.push_back(curr->level == OR ? "|" : "&");
-			}
-
-			if (curr->arguments[i].sub.valid) { 
-				stack.push_back(pair<int, parse_expression::expression*>(-1, &curr->arguments[i].sub));
-			}
-		}
-	}
-
-	cout << "cleanup " << result.to_string() << endl;
-
 	// Clean up final result
-	stack.clear();
-	stack.push_back(pair<int, parse_expression::expression*>(-1, &result));
+	/*stack.clear();
+	stack.push_back(pair<int, parse_prs::guard*>(-1, &result));
 	while (not stack.empty()) {
 		auto curr = stack.back().second;
 		stack.pop_back();
 
-		for (int i = (int)curr->arguments.size()-1; i >= 0; i--) {
-			if ((not curr->arguments[i].sub.valid and not curr->arguments[i].literal.valid)
-				or (curr->arguments[i].sub.valid and curr->arguments[i].sub.arguments.empty())) {
-				curr->arguments.erase(curr->arguments.begin()+i);
+		for (int i = (int)curr->terms.size()-1; i >= 0; i--) {
+			if ((not curr->terms[i].sub.valid and not curr->terms[i].ltrl.valid)
+				or (curr->terms[i].sub.valid and curr->terms[i].sub.terms.empty())) {
+				curr->terms.erase(curr->terms.begin()+i);
 			}
 		}
 
-		while (curr->arguments.size() == 1 and curr->operations.empty() and curr->arguments[0].sub.valid) {
-			// assigning *curr = curr->arguments[0].sub; assigns curr->arguments first which destroys the thing we're assigning from.
-			parse_expression::expression tmp = curr->arguments[0].sub;
+		while (curr->terms.size() == 1 and curr->terms[0].sub.valid) {
+			// assigning *curr = curr->terms[0].sub; assigns curr->terms first which destroys the thing we're assigning from.
+			parse_prs::guard tmp = curr->terms[0].sub;
 			*curr = tmp;
-			for (int i = (int)curr->arguments.size()-1; i >= 0; i--) {
-				if ((not curr->arguments[i].sub.valid and not curr->arguments[i].literal.valid)
-					or (curr->arguments[i].sub.valid and curr->arguments[i].sub.arguments.empty())) {
-					curr->arguments.erase(curr->arguments.begin()+i);
+			for (int i = (int)curr->terms.size()-1; i >= 0; i--) {
+				if ((not curr->terms[i].sub.valid and not curr->terms[i].ltrl.valid)
+					or (curr->terms[i].sub.valid and curr->terms[i].sub.terms.empty())) {
+					curr->terms.erase(curr->terms.begin()+i);
 				}
 			}
 		}
 
-		for (int i = 0; i < (int)curr->arguments.size(); i++) {
-			if (i != 0 and (curr->level == OR or curr->level == AND)) {
-				curr->operations.push_back(curr->level == OR ? "|" : "&");
-			}
-
-			if (curr->arguments[i].sub.valid) { 
-				stack.push_back(pair<int, parse_expression::expression*>(-1, &curr->arguments[i].sub));
-			}
+		for (int i = 0; i < (int)curr->terms.size(); i++) {
+			stack.push_back(pair<int, parse_prs::guard*>(-1, &curr->terms[i].sub));
 		}
-	}
-
-	cout << "done" << endl;
+	}*/
 
 	return result;
 }
