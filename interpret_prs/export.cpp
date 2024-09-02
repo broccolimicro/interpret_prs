@@ -155,13 +155,14 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 	}
 	sort(next.begin(), next.end());
 	next.erase(unique(next.begin(), next.end()), next.end());
+	stack.clear();
 
 	// Clean up final result
-	/*stack.clear();
-	stack.push_back(pair<int, parse_prs::guard*>(-1, &result));
-	while (not stack.empty()) {
-		auto curr = stack.back().second;
-		stack.pop_back();
+	vector<parse_prs::guard*> walk;
+	walk.push_back(&result);
+	while (not walk.empty()) {
+		auto curr = walk.back();
+		walk.pop_back();
 
 		for (int i = (int)curr->terms.size()-1; i >= 0; i--) {
 			if ((not curr->terms[i].sub.valid and not curr->terms[i].ltrl.valid)
@@ -183,9 +184,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 		}
 
 		for (int i = 0; i < (int)curr->terms.size(); i++) {
-			stack.push_back(pair<int, parse_prs::guard*>(-1, &curr->terms[i].sub));
+			walk.push_back(&curr->terms[i].sub);
 		}
-	}*/
+	}
 
 	return result;
 }
