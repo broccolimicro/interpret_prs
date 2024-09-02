@@ -15,10 +15,10 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 	parse_prs::guard result;
 	result.valid = true;
 	result.level = parse_prs::guard::AND;
-	vector<pair<int, parse_prs::guard*> > stack(1, pair<int, parse_prs::guard*>(drain, &result));
+	vector<pair<int, vector<parse_prs::guard*> > > stack(1, pair<int, vector<parse_prs::guard*> >(drain, vector<parse_prs::guard*>(1, &result)));
 	
 	// net -> elements in stack at net
-	map<int, vector<int> > merge;
+	map<int, vector<vector<int> > > merge;
 	bool step = true;
 	while (not stack.empty() and step) {
 		step = false;
@@ -27,87 +27,88 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 		// drain's "sourceOf" list
 
 		for (int i = 0; i < (int)stack.size(); i++) {
-			merge[stack[i].first].push_back(i);
+			auto pos = merge.insert(pair<int, vector<vector<int> > >(stack[i].first, vector<vector<int> >())).first;
+			bool found = false;
+			for (int j = 0; j < (int)pos->second.size() and not found; j++) {
+				int idx = pos->second[j].back();
+				if (stack[i].second[stack[i].second.size()-2] == stack[idx].second[stack[idx].second.size()-2]) {
+					pos->second[j].push_back(i);
+					found = true;
+				}
+			}
+			if (not found) {
+				pos->second.push_back(vector<int>(1, i));
+			}
 		}
 
 		// 2. for each item in the stack, step forward if we pass the
 		// test in step 1.
 		vector<int> toErase;
 		for (auto i = merge.begin(); i != merge.end(); i++) {
-			if (i->second.size() >= pr.at(i->first).sourceOf[threshold].size()) {
-				// Do the merge
-				if (i->second.size() > 1) {
-					parse_prs::guard para;
-					para.valid = true;
-					para.level = parse_prs::guard::OR;
-					para.terms.reserve(i->second.size()*2);
-					for (auto j = i->second.begin(); j != i->second.end(); j++) {
-						para.terms.push_back(parse_prs::term(*stack[*j].second));
-						stack[*j].second->valid = false;
-						toErase.push_back(*j);
+			for (int k = 0; k < (int)i->second.size(); k++) {
+				cout << i->first << " == " << drain << endl;
+				if (i->first == drain or i->second[k].size() >= pr.at(i->first).sourceOf[threshold].size()) {
+					// Do the merge
+					if (i->second[k].size() > 1) {
+						toErase.insert(toErase.end(), i->second[k].begin()+1, i->second[k].end());
+						stack[i->second[k][0]].second.pop_back();
 					}
 
-					parse_prs::guard seq;
-					seq.valid = true;
-					seq.level = parse_prs::guard::AND;
-					seq.terms.push_back(parse_prs::term(para));
+					int idx = i->second[k][0];
+					int net = i->first;
+					covered.push_back(net);
 
-					*stack[i->second[0]].second = seq;
-					i->second.resize(1);
-				}
+					// Handle precharge
+					if (net != drain and not stack[idx].second.back()->terms.empty() and not pr.at(net).drainOf[1-threshold].empty()) {
+						stack[idx].second.back()->terms[0].pchg = export_guard(pr, net, 1-threshold, variables, next, covered);
+					}
 
-				int idx = i->second[0];
-				int net = i->first;
-				covered.push_back(net);
+					// Do the split
+					if (pr.at(net).drainOf[threshold].size() > 1) {
+						stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), parse_prs::term(parse_prs::guard()));
+						parse_prs::guard *sub = &stack[idx].second.back()->terms[0].sub;
+						sub->valid = true;
+						sub->level = parse_prs::guard::OR;
+						sub->terms.reserve(pr.at(net).drainOf[threshold].size()*2);
+						for (int j = (int)pr.at(net).drainOf[threshold].size()-1; j >= 0; j--) {
+							int dev = pr.at(net).drainOf[threshold][j];
 
-				// Handle precharge
-				if (net != drain and not stack[idx].second->terms.empty() and not pr.at(net).drainOf[1-threshold].empty()) {
-					stack[idx].second->terms[0].pchg = export_guard(pr, net, 1-threshold, variables, next, covered);
-				}
+							sub->terms.push_back(parse_prs::term(parse_prs::guard()));
+							parse_prs::guard *subj = &sub->terms.back().sub;
+							subj->valid = true;
+							subj->level = parse_prs::guard::AND;
 
-				// Do the split
-				if (pr.at(net).drainOf[threshold].size() > 1) {
-					stack[idx].second->terms.insert(stack[idx].second->terms.begin(), parse_prs::term(parse_prs::guard()));
-					parse_prs::guard *sub = &stack[idx].second->terms[0].sub;
-					sub->valid = true;
-					sub->level = parse_prs::guard::OR;
-					sub->terms.reserve(pr.at(net).drainOf[threshold].size()*2);
-					for (int j = (int)pr.at(net).drainOf[threshold].size()-1; j >= 0; j--) {
-						int dev = pr.at(net).drainOf[threshold][j];
+							// add this literal
+							parse_prs::term arg(parse_prs::literal(export_variable_name(pr.devs[dev].gate, variables), pr.devs[dev].threshold == 0));
 
-						sub->terms.push_back(parse_prs::term(parse_prs::guard()));
-						parse_prs::guard *subj = &sub->terms.back().sub;
-						subj->valid = true;
-						subj->level = parse_prs::guard::AND;
+							subj->terms.insert(subj->terms.begin(), arg);
+
+							if (j != 0) {
+								stack.push_back(stack[idx]);
+								stack.back().second.push_back(subj);
+								stack.back().first = pr.devs[dev].source;
+							} else {
+								stack[idx].second.push_back(subj);
+								stack[idx].first = pr.devs[dev].source;
+							}
+						}
+					} else if (not pr.at(net).drainOf[threshold].empty()) {
+						int dev = pr.at(net).drainOf[threshold].back();
 
 						// add this literal
 						parse_prs::term arg(parse_prs::literal(export_variable_name(pr.devs[dev].gate, variables), pr.devs[dev].threshold == 0));
 
-						subj->terms.insert(subj->terms.begin(), arg);
+						stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), arg);
 
-						if (j != 0) {
-							stack.push_back(pair<int, parse_prs::guard*>(pr.devs[dev].source, subj));
-						} else {
-							stack[idx].second = subj;
-							stack[idx].first = pr.devs[dev].source;
-						}
+						stack[idx].first = pr.devs[dev].source;
+					} else {
+						parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].first, variables), false, false));
+						stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), arg);
+						toErase.push_back(idx);
 					}
-				} else if (not pr.at(net).drainOf[threshold].empty()) {
-					int dev = pr.at(net).drainOf[threshold].back();
-
-					// add this literal
-					parse_prs::term arg(parse_prs::literal(export_variable_name(pr.devs[dev].gate, variables), pr.devs[dev].threshold == 0));
-
-					stack[idx].second->terms.insert(stack[idx].second->terms.begin(), arg);
-
-					stack[idx].first = pr.devs[dev].source;
-				} else {
-					parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].first, variables), false, false));
-					stack[idx].second->terms.insert(stack[idx].second->terms.begin(), arg);
-					toErase.push_back(idx);
+					
+					step = true;
 				}
-				
-				step = true;
 			}
 		}
 
@@ -116,7 +117,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 		sort(toErase.begin(), toErase.end());
 		toErase.erase(unique(toErase.begin(), toErase.end()), toErase.end());
 		for (int i = (int)toErase.size()-1; i >= 0; i--) {
-			stack[toErase[i]].second = nullptr;
+			stack[toErase[i]].second.clear();
 			stack.erase(stack.begin() + toErase[i]);
 		}
 	}
@@ -125,7 +126,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 	//   stop here and those nodes become virtual nodes.
 	for (auto i = stack.begin(); i != stack.end(); i++) {
 		parse_prs::term arg(parse_prs::literal(export_variable_name(i->first, variables), false, false));
-		i->second->terms.insert(i->second->terms.begin(), arg);
+		i->second.back()->terms.insert(i->second.back()->terms.begin(), arg);
 
 		if (find(covered.begin(), covered.end(), i->first) == covered.end()) {
 			next.push_back(i->first);
@@ -214,7 +215,7 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 		cout << "curr=" << curr << endl;
 
 		for (int i = 0; i < 2; i++) {
-			if (not pr.at(curr).drainOf[i].empty()) {
+			if (not pr.at(curr).drainOf[1-i].empty()) {
 				result.rules.push_back(export_production_rule(pr, curr, i, variables, stack, covered));
 			}
 		}
