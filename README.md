@@ -7,7 +7,7 @@ A library for loading the parse tree in parse_prs into the structures found in t
 Licensed by Cornell University under GNU GPL v3.
 
 Written by Ned Bingham.
-Copyright © 2020 Cornell University.
+Copyright © 2020 Broccoli, LLC.
 
 Haystack is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
