@@ -248,21 +248,6 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 		g = globals(variables);
 	}
 
-	cout << "nets " << pr.nets.size() << endl;
-	for (int i = 0; i < (int)pr.nets.size(); i++) {
-		cout << "net " << i << ": gateOf=" << to_string(pr.nets[i].gateOf[0]) << to_string(pr.nets[i].gateOf[1]) << " sourceOf=" << to_string(pr.nets[i].sourceOf[0]) << to_string(pr.nets[i].sourceOf[1]) << " drainOf=" << to_string(pr.nets[i].drainOf[0]) << to_string(pr.nets[i].drainOf[1])  << endl;
-	}
-
-	cout << "nodes " << pr.nodes.size() << endl;
-	for (int i = 0; i < (int)pr.nodes.size(); i++) {
-		cout << "node " << i << ": gateOf=" << to_string(pr.nodes[i].gateOf[0]) << to_string(pr.nodes[i].gateOf[1]) << " sourceOf=" << to_string(pr.nodes[i].sourceOf[0]) << to_string(pr.nodes[i].sourceOf[1]) << " drainOf=" << to_string(pr.nodes[i].drainOf[0]) << to_string(pr.nodes[i].drainOf[1])  << endl;
-	}
-
-	cout << "devs " << pr.devs.size() << endl;
-	for (int i = 0; i < (int)pr.devs.size(); i++) {
-		cout << "dev " << i << ": source=" << pr.devs[i].source << " gate=" << pr.devs[i].gate << " drain=" << pr.devs[i].drain << " threshold=" << pr.devs[i].threshold << endl;
-	}
-
 	parse_prs::production_rule_set result;
 	result.valid = true;
 	vector<int> stack, covered;
