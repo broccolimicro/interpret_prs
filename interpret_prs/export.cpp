@@ -279,8 +279,10 @@ parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &
 	graph.type = "digraph";
 	graph.id = "bubble";
 
-	for (size_t i = 0; i < variables.nodes.size(); i++)
-	{
+	for (int i = 0; i < bub.nets; i++) {
+		if (not bub.linked[i]) {
+			continue;
+		}
 		graph.statements.push_back(parse_dot::statement());
 		parse_dot::statement &stmt = graph.statements.back();
 		stmt.statement_type = "node";
@@ -290,8 +292,28 @@ parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &
 		attr.as.push_back(parse_dot::assignment());
 		parse_dot::assignment &a = attr.as.back();
 		a.first = "label";
-		a.second = variables.nodes[i].to_string();
+		a.second = export_variable_name(i, variables).to_string();
 		if (bub.inverted[i]) {
+			a.second = "_" + a.second;
+		}
+	}
+
+	for (int i = 0; i < bub.nodes; i++) {
+		int j = -i-1;
+		if (not bub.linked[bub.uid(j)]) {
+			continue;
+		}
+		graph.statements.push_back(parse_dot::statement());
+		parse_dot::statement &stmt = graph.statements.back();
+		stmt.statement_type = "node";
+		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(bub.uid(j))));
+		stmt.attributes.attributes.push_back(parse_dot::assignment_list());
+		parse_dot::assignment_list &attr = stmt.attributes.attributes.back();
+		attr.as.push_back(parse_dot::assignment());
+		parse_dot::assignment &a = attr.as.back();
+		a.first = "label";
+		a.second = export_variable_name(j, variables).to_string();
+		if (bub.inverted[bub.uid(j)]) {
 			a.second = "_" + a.second;
 		}
 	}
@@ -301,9 +323,9 @@ parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &
 		graph.statements.push_back(parse_dot::statement());
 		parse_dot::statement &stmt = graph.statements.back();
 		stmt.statement_type = "edge";
-		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(i->from)));
-		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(i->to)));
-		if (i->isochronic || i->bubble)
+		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(bub.uid(i->from))));
+		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(bub.uid(i->to))));
+		if (i->isochronic or i->bubble)
 		{
 			stmt.attributes.attributes.push_back(parse_dot::assignment_list());
 			parse_dot::assignment_list &attr = stmt.attributes.attributes.back();
