@@ -1,12 +1,6 @@
-/*
- * import.cpp
- *
- *  Created on: Feb 6, 2015
- *      Author: nbingham
- */
-
 #include "import.h"
-#include <interpret_boolean/import.h>
+
+#include <interpret_ucs/import.h>
 
 namespace prs {
 
@@ -45,6 +39,12 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 					tokens->error("literals must be a wire", __FILE__, __LINE__);
 				} else {
 					error(syntax.to_string(), "literals must be a wire", __FILE__, __LINE__);
+				}
+			}
+			pr.create(v[0]);
+			for (int i = 0; i < (int)variables.nodes.size(); i++) {
+				if (v[0] != i and variables.nodes[i].name == variables.nodes[v[0]].name) {
+					pr.connect_remote(v[0], i);
 				}
 			}
 
@@ -92,6 +92,16 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 		result.assume = import_cover(syntax.assume, variables, default_id, tokens, auto_define);
 	}*/
 
+	if (syntax.weak) {
+		attr.weak = true;
+	}
+	if (syntax.pass) {
+		attr.pass = true;
+	}
+	if (syntax.after != std::numeric_limits<uint64_t>::max()) {
+		attr.delay_max = syntax.after;
+	}
+
 	int driver = -1;
 	for (int i = 0; i < (int)syntax.action.names.size(); i++) {
 		if (syntax.action.operation == "+") {
@@ -116,6 +126,12 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 				error(syntax.to_string(), "literals must be a wire", __FILE__, __LINE__);
 			}
 		}
+		pr.create(v[0], syntax.keep);
+		for (int i = 0; i < (int)variables.nodes.size(); i++) {
+			if (v[0] != i and variables.nodes[i].name == variables.nodes[v[0]].name) {
+				pr.connect_remote(v[0], i);
+			}
+		}
 
 		vector<int> result = import_guard(syntax.implicant, pr, v[0], driver, vdd, gnd, attr, variables, default_id, tokens, auto_define);
 		if (not result.empty()) {
@@ -126,6 +142,10 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 
 void import_production_rule_set(const parse_prs::production_rule_set &syntax, prs::production_rule_set &pr, int vdd, int gnd, attributes attr, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
 {
+	if (syntax.region != "") {
+		default_id = atoi(syntax.region.c_str());
+	}
+
 	if (gnd < 0) {
 		gnd = variables.find(ucs::variable("GND"));
 	}
@@ -140,11 +160,9 @@ void import_production_rule_set(const parse_prs::production_rule_set &syntax, pr
 	}
 
 	if (pr.nets.size() < variables.nodes.size()) {
-		pr.nets.resize(variables.nodes.size());
+		pr.create(variables.nodes.size()-1);
 	}
-
-	if (syntax.region != "")
-		default_id = atoi(syntax.region.c_str());
+	pr.set_power(vdd, gnd);
 
 	for (int i = 0; i < (int)syntax.rules.size(); i++) {
 		import_production_rule(syntax.rules[i], pr, vdd, gnd, attr, variables, default_id, tokens, auto_define);

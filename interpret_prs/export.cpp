@@ -1,17 +1,33 @@
-/*
- * export.cpp
- *
- *  Created on: Feb 6, 2015
- *      Author: nbingham
- */
-
 #include "export.h"
 #include <interpret_boolean/export.h>
 #include <parse_dot/node_id.h>
 
 namespace prs {
 
-parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int driver, int vdd, int gnd, ucs::variable_set &variables, vector<int> &next, vector<int> &covered) {
+globals::globals() {
+	vdd = -1;
+	gnd = -1;
+}
+
+globals::globals(ucs::variable_set &variables) {
+	gnd = variables.find(ucs::variable("GND"));
+	if (gnd < 0) {
+		gnd = variables.define(ucs::variable("GND"));
+	}
+	vdd = variables.find(ucs::variable("Vdd"));
+	if (vdd < 0) {
+		vdd = variables.define(ucs::variable("Vdd"));
+	}
+}
+
+globals::~globals() {
+}
+
+parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int value, ucs::variable_set &variables, globals g, vector<int> *next, vector<int> *covered) {
+	if (g.vdd < 0 and g.gnd < 0) {
+		g = globals(variables);
+	}
+
 	parse_prs::guard result;
 	result.valid = true;
 	result.level = parse_prs::guard::AND;
@@ -46,7 +62,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 		vector<int> toErase;
 		for (auto i = merge.begin(); i != merge.end(); i++) {
 			for (int k = 0; k < (int)i->second.size(); k++) {
-				if (i->first == drain or i->second[k].size() >= pr.at(i->first).sourceOf[driver].size()) {
+				if (i->first == drain or (int)i->second[k].size() >= pr.sources(i->first, value)) {
 					// Do the merge
 					if (i->second[k].size() > 1) {
 						toErase.insert(toErase.end(), i->second[k].begin()+1, i->second[k].end());
@@ -55,22 +71,28 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 
 					int idx = i->second[k][0];
 					int net = i->first;
-					covered.push_back(net);
+					if (covered != nullptr) {
+						covered->push_back(net);
+					}
 
 					// Handle precharge
-					if (net != drain and not stack[idx].second.back()->terms.empty() and not pr.at(net).drainOf[1-driver].empty()) {
-						stack[idx].second.back()->terms[0].pchg = export_guard(pr, net, 1-driver, vdd, gnd, variables, next, covered);
+					if (net != drain and not stack[idx].second.back()->terms.empty() and pr.drains(net, 1-value) != 0) {
+						stack[idx].second.back()->terms[0].pchg = export_guard(pr, net, 1-value, variables, g, next, covered);
 					}
 
 					// Do the split
-					if (pr.at(net).drainOf[driver].size() > 1) {
+					if (pr.drains(net, value) > 1) {
 						stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), parse_prs::term(parse_prs::guard()));
 						parse_prs::guard *sub = &stack[idx].second.back()->terms[0].sub;
 						sub->valid = true;
 						sub->level = parse_prs::guard::OR;
-						sub->terms.reserve(pr.at(net).drainOf[driver].size()*2);
-						for (int j = (int)pr.at(net).drainOf[driver].size()-1; j >= 0; j--) {
-							int dev = pr.at(net).drainOf[driver][j];
+						int drains = pr.drains(net, value);
+						sub->terms.reserve(drains*2);
+						for (int j = (int)pr.at(net).drainOf[value].size()-1; j >= 0; j--) {
+							auto dev = pr.devs.begin()+pr.at(net).drainOf[value][j];
+							if (dev->drain != net) {
+								continue;
+							}
 
 							sub->terms.push_back(parse_prs::term(parse_prs::guard()));
 							parse_prs::guard *subj = &sub->terms.back().sub;
@@ -78,48 +100,54 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 							subj->level = parse_prs::guard::AND;
 
 							// add this literal
-							parse_prs::term arg(parse_prs::literal(export_variable_name(pr.devs[dev].gate, variables), pr.devs[dev].threshold == 0));
-							if (pr.devs[dev].attr.width > 0.0) {
-								arg.width = to_string(pr.devs[dev].attr.width);
-								if (pr.devs[dev].attr.length > 0.0) {
-									arg.length = to_string(pr.devs[dev].attr.length);
-									if (pr.devs[dev].attr.variant != "") {
-										arg.variant = pr.devs[dev].attr.variant;
+							parse_prs::term arg(parse_prs::literal(export_variable_name(dev->gate, variables), dev->threshold == 0));
+							if (dev->attr.width > 0.0) {
+								arg.width = to_string(dev->attr.width);
+								if (dev->attr.length > 0.0) {
+									arg.length = to_string(dev->attr.length);
+									if (dev->attr.variant != "") {
+										arg.variant = dev->attr.variant;
 									}
 								}
 							}
 
 							subj->terms.insert(subj->terms.begin(), arg);
 
-							if (j != 0) {
+							if ((int)sub->terms.size() == drains) {
 								stack.push_back(stack[idx]);
 								stack.back().second.push_back(subj);
-								stack.back().first = pr.devs[dev].source;
+								stack.back().first = dev->source;
 							} else {
 								stack[idx].second.push_back(subj);
-								stack[idx].first = pr.devs[dev].source;
+								stack[idx].first = dev->source;
 							}
 						}
-					} else if (not pr.at(net).drainOf[driver].empty()) {
-						int dev = pr.at(net).drainOf[driver].back();
+					} else if (pr.drains(net, value) != 0) {
+						auto dev = pr.devs.begin()+pr.at(net).drainOf[value][0];
+						for (auto di = pr.at(net).drainOf[value].begin(); di != pr.at(net).drainOf[value].end(); di++) {
+							if (dev->drain == net) {
+								dev = pr.devs.begin()+*di;
+								break;
+							}
+						}
 
 						// add this literal
-						parse_prs::term arg(parse_prs::literal(export_variable_name(pr.devs[dev].gate, variables), pr.devs[dev].threshold == 0));
-						if (pr.devs[dev].attr.width > 0.0) {
-							arg.width = to_string(pr.devs[dev].attr.width);
-							if (pr.devs[dev].attr.length > 0.0) {
-								arg.length = to_string(pr.devs[dev].attr.length);
-								if (pr.devs[dev].attr.variant != "") {
-									arg.variant = pr.devs[dev].attr.variant;
+						parse_prs::term arg(parse_prs::literal(export_variable_name(dev->gate, variables), dev->threshold == 0));
+						if (dev->attr.width > 0.0) {
+							arg.width = to_string(dev->attr.width);
+							if (dev->attr.length > 0.0) {
+								arg.length = to_string(dev->attr.length);
+								if (dev->attr.variant != "") {
+									arg.variant = dev->attr.variant;
 								}
 							}
 						}
 
 						stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), arg);
 
-						stack[idx].first = pr.devs[dev].source;
+						stack[idx].first = dev->source;
 					} else {
-						if (stack[idx].first != vdd and stack[idx].first != gnd) {
+						if (stack[idx].first != g.vdd and stack[idx].first != g.gnd) {
 							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].first, variables), false, false));
 							stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), arg);
 						}
@@ -144,17 +172,19 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 	//   a. if none of the items in the stack pass the test, then we
 	//   stop here and those nodes become virtual nodes.
 	for (auto i = stack.begin(); i != stack.end(); i++) {
-		if (i->first != vdd and i->first != gnd) {
+		if (i->first != g.vdd and i->first != g.gnd) {
 			parse_prs::term arg(parse_prs::literal(export_variable_name(i->first, variables), false, false));
 			i->second.back()->terms.insert(i->second.back()->terms.begin(), arg);
 		}
 
-		if (find(covered.begin(), covered.end(), i->first) == covered.end()) {
-			next.push_back(i->first);
+		if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), i->first) == covered->end())) {
+			next->push_back(i->first);
 		}
 	}
-	sort(next.begin(), next.end());
-	next.erase(unique(next.begin(), next.end()), next.end());
+	if (next != nullptr) {
+		sort(next->begin(), next->end());
+		next->erase(unique(next->begin(), next->end()), next->end());
+	}
 	stack.clear();
 
 	// Clean up final result
@@ -191,43 +221,38 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 	return result;
 }
 
-parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, int net, int value, int vdd, int gnd, ucs::variable_set &variables, vector<int> &next, vector<int> &covered)
+parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, int net, int value, ucs::variable_set &variables, globals g, vector<int> *next, vector<int> *covered)
 {
+	if (g.vdd < 0 and g.gnd < 0) {
+		g = globals(variables);
+	}
+
 	parse_prs::production_rule result;
 	result.valid = true;
 	/*if (not pr.assume.is_tautology()) {
 		result.assume = export_expression_xfactor(pr.assume, variables);
 	}*/
-	result.implicant = export_guard(pr, net, value, vdd, gnd, variables, next, covered);
+	result.implicant = export_guard(pr, net, value, variables, g, next, covered);
 	result.action.valid = true;
 	result.action.names.push_back(export_variable_name(net, variables));
 	result.action.operation = value == 1 ? "+" : "-";
 	return result;
 }
 
-parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, int vdd, int gnd, ucs::variable_set &variables)
+parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, ucs::variable_set &variables, globals g)
 {
-	if (gnd < 0) {
-		gnd = variables.find(ucs::variable("GND"));
-	}
-	if (gnd < 0) {
-		gnd = variables.define(ucs::variable("GND"));
-	}
-	if (vdd < 0) {
-		vdd = variables.find(ucs::variable("Vdd"));
-	}
-	if (vdd < 0) {
-		vdd = variables.define(ucs::variable("Vdd"));
+	if (g.vdd < 0 and g.gnd < 0) {
+		g = globals(variables);
 	}
 
 	cout << "nets " << pr.nets.size() << endl;
 	for (int i = 0; i < (int)pr.nets.size(); i++) {
-		cout << "net " << i << ": gateOf=" << to_string(pr.nets[i].gateOf) << " sourceOf=" << to_string(pr.nets[i].sourceOf[0]) << to_string(pr.nets[i].sourceOf[1]) << " drainOf=" << to_string(pr.nets[i].drainOf[0]) << to_string(pr.nets[i].drainOf[1])  << endl;
+		cout << "net " << i << ": gateOf=" << to_string(pr.nets[i].gateOf[0]) << to_string(pr.nets[i].gateOf[1]) << " sourceOf=" << to_string(pr.nets[i].sourceOf[0]) << to_string(pr.nets[i].sourceOf[1]) << " drainOf=" << to_string(pr.nets[i].drainOf[0]) << to_string(pr.nets[i].drainOf[1])  << endl;
 	}
 
 	cout << "nodes " << pr.nodes.size() << endl;
 	for (int i = 0; i < (int)pr.nodes.size(); i++) {
-		cout << "node " << i << ": gateOf=" << to_string(pr.nodes[i].gateOf) << " sourceOf=" << to_string(pr.nodes[i].sourceOf[0]) << to_string(pr.nodes[i].sourceOf[1]) << " drainOf=" << to_string(pr.nodes[i].drainOf[0]) << to_string(pr.nodes[i].drainOf[1])  << endl;
+		cout << "node " << i << ": gateOf=" << to_string(pr.nodes[i].gateOf[0]) << to_string(pr.nodes[i].gateOf[1]) << " sourceOf=" << to_string(pr.nodes[i].sourceOf[0]) << to_string(pr.nodes[i].sourceOf[1]) << " drainOf=" << to_string(pr.nodes[i].drainOf[0]) << to_string(pr.nodes[i].drainOf[1])  << endl;
 	}
 
 	cout << "devs " << pr.devs.size() << endl;
@@ -248,15 +273,15 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 		stack.pop_back();
 
 		for (int i = 0; i < 2; i++) {
-			if (not pr.at(curr).drainOf[i].empty()) {
-				result.rules.push_back(export_production_rule(pr, curr, i, vdd, gnd, variables, stack, covered));
+			if (pr.drains(curr, i) != 0) {
+				result.rules.push_back(export_production_rule(pr, curr, i, variables, g, &stack, &covered));
 			}
 		}
 	}
 	return result;
 }
 
-/*parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &variables)
+parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &variables)
 {
 	parse_dot::graph graph;
 	graph.type = "digraph";
@@ -284,14 +309,14 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 		graph.statements.push_back(parse_dot::statement());
 		parse_dot::statement &stmt = graph.statements.back();
 		stmt.statement_type = "edge";
-		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(i->first.first)));
-		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(i->first.second)));
-		if (i->second.first || i->second.second)
+		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(i->from)));
+		stmt.nodes.push_back(new parse_dot::node_id("V" + to_string(i->to)));
+		if (i->isochronic || i->bubble)
 		{
 			stmt.attributes.attributes.push_back(parse_dot::assignment_list());
 			parse_dot::assignment_list &attr = stmt.attributes.attributes.back();
 
-			if (i->second.first)
+			if (i->isochronic)
 			{
 				attr.as.push_back(parse_dot::assignment());
 				parse_dot::assignment &a = attr.as.back();
@@ -299,7 +324,7 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 				a.second = "dashed";
 			}
 
-			if (i->second.second)
+			if (i->bubble)
 			{
 				attr.as.push_back(parse_dot::assignment());
 				parse_dot::assignment &a1 = attr.as.back();
@@ -310,6 +335,6 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 	}
 
 	return graph;
-}*/
+}
 
 }
