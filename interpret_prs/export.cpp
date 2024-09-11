@@ -23,7 +23,13 @@ globals::globals(ucs::variable_set &variables) {
 globals::~globals() {
 }
 
-parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_set &variables, int drain, int value, bool weak, bool pass, globals g, vector<int> *next, vector<int> *covered) {
+parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_set &variables, int drain, int value, bool weak, bool pass, boolean::cover assume, globals g, vector<int> *next, vector<int> *covered) {
+	struct walker {
+		int drain;
+		vector<parse_prs::guard*> stack;
+		boolean::cover assume;
+	};
+
 	if (g.vdd < 0 and g.gnd < 0) {
 		g = globals(variables);
 	}
@@ -31,7 +37,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 	parse_prs::guard result;
 	result.valid = true;
 	result.level = parse_prs::guard::AND;
-	vector<pair<int, vector<parse_prs::guard*> > > stack(1, pair<int, vector<parse_prs::guard*> >(drain, vector<parse_prs::guard*>(1, &result)));
+	vector<walker> stack(1, {drain, vector<parse_prs::guard*>(1, &result), assume});
 	
 	// net -> elements in stack at net
 	map<int, vector<vector<int> > > merge;
@@ -43,11 +49,11 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 		// drain's "sourceOf" list
 
 		for (int i = 0; i < (int)stack.size(); i++) {
-			auto pos = merge.insert(pair<int, vector<vector<int> > >(stack[i].first, vector<vector<int> >())).first;
+			auto pos = merge.insert(pair<int, vector<vector<int> > >(stack[i].drain, vector<vector<int> >())).first;
 			bool found = false;
 			for (int j = 0; j < (int)pos->second.size() and not found; j++) {
 				int idx = pos->second[j].back();
-				if (stack[i].second[stack[i].second.size()-2] == stack[idx].second[stack[idx].second.size()-2]) {
+				if (stack[i].stack[stack[i].stack.size()-2] == stack[idx].stack[stack[idx].stack.size()-2]) {
 					pos->second[j].push_back(i);
 					found = true;
 				}
@@ -62,35 +68,36 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 		vector<int> toErase;
 		for (auto i = merge.begin(); i != merge.end(); i++) {
 			for (int k = 0; k < (int)i->second.size(); k++) {
-				if (i->first == drain or (int)i->second[k].size() >= pr.sources(i->first, value, weak ? 1 : 0, pass ? 1 : 0)) {
+				if (i->first == drain or (int)i->second[k].size() >= pr.sources(i->first, value)) {
 					// Do the merge
 					if (i->second[k].size() > 1) {
 						toErase.insert(toErase.end(), i->second[k].begin()+1, i->second[k].end());
-						stack[i->second[k][0]].second.pop_back();
+						stack[i->second[k][0]].stack.pop_back();
 					}
 
 					int idx = i->second[k][0];
 					int net = i->first;
-					if (covered != nullptr) {
-						covered->push_back(net);
-					}
 
 					// Handle precharge
-					if (net != drain and not stack[idx].second.back()->terms.empty() and pr.drains(net, 1-value, weak ? 1 : 0, pass ? 1 : 0) != 0) {
-						stack[idx].second.back()->terms[0].pchg = export_guard(pr, variables, net, 1-value, weak, pass, g, next, covered);
+					if (net != drain and not stack[idx].stack.back()->terms.empty() and pr.drains(net, 1-value) != 0) {
+						stack[idx].stack.back()->terms[0].pchg = export_guard(pr, variables, net, 1-value, weak, pass, 1, g, next, covered);
 					}
 
 					// Do the split
-					int drains = pr.drains(net, value, weak ? 1 : 0, pass ? 1 : 0);
+					int drains = pr.drains(net, value);
+					if (pr.drains(net, value, weak ? 1 : 0, pass ? 1 : 0, stack[idx].assume) != drains) {
+						continue;
+					}
+
 					if (drains > 1) {
-						stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), parse_prs::term(parse_prs::guard()));
-						parse_prs::guard *sub = &stack[idx].second.back()->terms[0].sub;
+						stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), parse_prs::term(parse_prs::guard()));
+						parse_prs::guard *sub = &stack[idx].stack.back()->terms[0].sub;
 						sub->valid = true;
 						sub->level = parse_prs::guard::OR;
 						sub->terms.reserve(drains*2);
 						for (int j = (int)pr.at(net).drainOf[value].size()-1; j >= 0; j--) {
 							auto dev = pr.devs.begin()+pr.at(net).drainOf[value][j];
-							if (dev->drain != net or dev->attr.weak != weak or dev->attr.pass != pass) {
+							if (dev->drain != net or dev->attr.weak != weak or dev->attr.pass != pass or dev->assume != assume) {
 								continue;
 							}
 
@@ -115,17 +122,19 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 
 							if ((int)sub->terms.size() == drains) {
 								stack.push_back(stack[idx]);
-								stack.back().second.push_back(subj);
-								stack.back().first = dev->source;
+								stack.back().stack.push_back(subj);
+								stack.back().drain = dev->source;
+								stack.back().assume = 1;
 							} else {
-								stack[idx].second.push_back(subj);
-								stack[idx].first = dev->source;
+								stack[idx].stack.push_back(subj);
+								stack[idx].drain = dev->source;
+								stack[idx].assume = 1;
 							}
 						}
 					} else if (drains != 0) {
 						auto dev = pr.devs.begin()+pr.at(net).drainOf[value][0];
 						for (auto di = pr.at(net).drainOf[value].begin(); di != pr.at(net).drainOf[value].end(); di++) {
-							if (pr.devs[*di].drain == net and pr.devs[*di].attr.weak == weak and pr.devs[*di].attr.pass == pass) {
+							if (pr.devs[*di].drain == net and pr.devs[*di].attr.weak == weak and pr.devs[*di].attr.pass == pass and pr.devs[*di].assume == assume) {
 								dev = pr.devs.begin()+*di;
 								break;
 							}
@@ -143,13 +152,13 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							}
 						}
 
-						stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), arg);
-
-						stack[idx].first = dev->source;
+						stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
+						stack[idx].drain = dev->source;
+						stack[idx].assume = 1;
 					} else {
-						if (stack[idx].first != g.vdd and stack[idx].first != g.gnd) {
-							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].first, variables), false, false));
-							stack[idx].second.back()->terms.insert(stack[idx].second.back()->terms.begin(), arg);
+						if (stack[idx].drain != g.vdd and stack[idx].drain != g.gnd) {
+							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].drain, variables), false, false));
+							stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
 						}
 						toErase.push_back(idx);
 					}
@@ -164,7 +173,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 		sort(toErase.begin(), toErase.end());
 		toErase.erase(unique(toErase.begin(), toErase.end()), toErase.end());
 		for (int i = (int)toErase.size()-1; i >= 0; i--) {
-			stack[toErase[i]].second.clear();
+			stack[toErase[i]].stack.clear();
 			stack.erase(stack.begin() + toErase[i]);
 		}
 	}
@@ -172,13 +181,13 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 	//   a. if none of the items in the stack pass the test, then we
 	//   stop here and those nodes become virtual nodes.
 	for (auto i = stack.begin(); i != stack.end(); i++) {
-		if (i->first != g.vdd and i->first != g.gnd) {
-			parse_prs::term arg(parse_prs::literal(export_variable_name(i->first, variables), false, false));
-			i->second.back()->terms.insert(i->second.back()->terms.begin(), arg);
+		if (i->drain != g.vdd and i->drain != g.gnd) {
+			parse_prs::term arg(parse_prs::literal(export_variable_name(i->drain, variables), false, false));
+			i->stack.back()->terms.insert(i->stack.back()->terms.begin(), arg);
 		}
 
-		if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), i->first) == covered->end())) {
-			next->push_back(i->first);
+		if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), i->drain) == covered->end())) {
+			next->push_back(i->drain);
 		}
 	}
 	if (next != nullptr) {
@@ -221,7 +230,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 	return result;
 }
 
-parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, ucs::variable_set &variables, int net, int value, bool weak, bool pass, globals g, vector<int> *next, vector<int> *covered)
+parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, ucs::variable_set &variables, int net, int value, bool weak, bool pass, boolean::cover assume, globals g, vector<int> *next, vector<int> *covered)
 {
 	if (g.vdd < 0 and g.gnd < 0) {
 		g = globals(variables);
@@ -232,10 +241,10 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 	result.keep = pr.at(net).keep;
 	result.weak = weak;
 	result.pass = pass;
-	/*if (not pr.assume.is_tautology()) {
-		result.assume = export_expression_xfactor(pr.assume, variables);
-	}*/
-	result.implicant = export_guard(pr, variables, net, value, weak, pass, g, next, covered);
+	if (not assume.is_tautology()) {
+		result.assume = export_expression_xfactor(assume, variables);
+	}
+	result.implicant = export_guard(pr, variables, net, value, weak, pass, assume, g, next, covered);
 	result.action.valid = true;
 	result.action.names.push_back(export_variable_name(net, variables));
 	result.action.operation = value == 1 ? "+" : "-";
@@ -251,7 +260,6 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 	parse_prs::production_rule_set result;
 	result.valid = true;
 	vector<int> stack, covered;
-	stack.reserve(pr.nets.size()*10);
 	for (int i = 0; i < (int)pr.nets.size(); i++) {
 		stack.push_back(i);
 	}
@@ -263,8 +271,9 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 		for (int i = 0; i < 2; i++) {
 			for (int weak = 0; weak < 2; weak++) {
 				for (int pass = 0; pass < 2; pass++) {
-					if (pr.drains(curr, i, weak, pass) != 0) {
-						result.rules.push_back(export_production_rule(pr, variables, curr, i, weak==1, pass==1, g, &stack, &covered));
+					auto groups = pr.drain_groups(curr, i, weak==1, pass==1);
+					for (auto assume = groups.begin(); assume != groups.end(); assume++) {
+						result.rules.push_back(export_production_rule(pr, variables, curr, i, weak==1, pass==1, *assume, g, &stack, &covered));
 					}
 				}
 			}

@@ -1,10 +1,11 @@
 #include "import.h"
 
 #include <interpret_ucs/import.h>
+#include <interpret_boolean/import.h>
 
 namespace prs {
 
-vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_set &pr, int drain, int driver, int vdd, int gnd, attributes attr, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
+vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_set &pr, int drain, int driver, int vdd, int gnd, boolean::cover assume, attributes attr, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
 {
 	if (syntax.region != "")
 		default_id = atoi(syntax.region.c_str());
@@ -25,7 +26,7 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 		// interpret the operands
 		vector<int> net(1,to.back());
 		if (syntax.terms[i].sub.valid) {
-			net = import_guard(syntax.terms[i].sub, pr, to.back(), driver, vdd, gnd, termAttr, variables, default_id, tokens, auto_define);
+			net = import_guard(syntax.terms[i].sub, pr, to.back(), driver, vdd, gnd, assume, termAttr, variables, default_id, tokens, auto_define);
 			if (net.empty()) {
 				to.pop_back();
 			} else {
@@ -49,7 +50,7 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 			}
 
 			if (syntax.terms[i].ltrl.gate) {
-				to.back() = pr.add_source(v.back(), to.back(), syntax.terms[i].ltrl.invert ? 0 : 1, driver, termAttr);
+				to.back() = pr.add_source(v.back(), to.back(), syntax.terms[i].ltrl.invert ? 0 : 1, driver, assume, termAttr);
 				net.back() = to.back();
 			} else {
 				pr.connect(to.back(), v.back());
@@ -59,12 +60,16 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 			}
 		}
 
+		if (syntax.level == parse_prs::guard::AND) {
+			assume = 1;
+		}
+
 		// interpret the operators
 		if (i != 0 and syntax.level == parse_prs::guard::OR) {
 			to.push_back(drain);
 		} else if (i != 0 and syntax.level == parse_prs::guard::AND and syntax.terms[i].pchg.valid and not net.empty()) {
 			int subSource = driver == 1 ? vdd : gnd;
-			vector<int> otherSource = import_guard(syntax.terms[i].pchg, pr, net.back(), subSource, vdd, gnd, attributes(), variables, default_id, tokens, auto_define);
+			vector<int> otherSource = import_guard(syntax.terms[i].pchg, pr, net.back(), subSource, vdd, gnd, assume, attributes(), variables, default_id, tokens, auto_define);
 			if (not otherSource.empty()) {
 				pr.connect(otherSource.back(), subSource);
 				pr.replace(to, otherSource.back(), subSource);
@@ -88,10 +93,6 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 
 void import_production_rule(const parse_prs::production_rule &syntax, prs::production_rule_set &pr, int vdd, int gnd, attributes attr, ucs::variable_set &variables, int default_id, tokenizer *tokens, bool auto_define)
 {
-	/*if (syntax.assume.valid) {
-		result.assume = import_cover(syntax.assume, variables, default_id, tokens, auto_define);
-	}*/
-
 	if (syntax.weak) {
 		attr.weak = true;
 	}
@@ -100,6 +101,11 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 	}
 	if (syntax.after != std::numeric_limits<uint64_t>::max()) {
 		attr.delay_max = syntax.after;
+	}
+
+	boolean::cover assume=1;
+	if (syntax.assume.valid) {
+		assume = import_cover(syntax.assume, variables, default_id, tokens, auto_define);
 	}
 
 	int driver = -1;
@@ -133,7 +139,7 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 			}
 		}
 
-		vector<int> result = import_guard(syntax.implicant, pr, v[0], driver, vdd, gnd, attr, variables, default_id, tokens, auto_define);
+		vector<int> result = import_guard(syntax.implicant, pr, v[0], driver, vdd, gnd, assume, attr, variables, default_id, tokens, auto_define);
 		if (not result.empty()) {
 			pr.connect(result.back(), driver == 1 ? vdd : gnd);
 		}
