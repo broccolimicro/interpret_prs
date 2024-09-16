@@ -29,8 +29,8 @@ struct globals {
 	int gnd;
 };
 
-parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_set &variables, int drain, int value, bool weak=false, bool pass=false, boolean::cover assume=1, globals g=globals(), vector<int> *next=nullptr, vector<int> *covered=nullptr);
-parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, ucs::variable_set &variables, int net, int value, bool weak=false, bool pass=false, boolean::cover assume=1, globals g=globals(), vector<int> *next=nullptr, vector<int> *covered=nullptr);
+parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_set &variables, int drain, int value, prs::attributes attr=attributes(), globals g=globals(), vector<int> *next=nullptr, vector<int> *covered=nullptr);
+parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, ucs::variable_set &variables, int net, int value, prs::attributes attr=attributes(), globals g=globals(), vector<int> *next=nullptr, vector<int> *covered=nullptr);
 parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, ucs::variable_set &variables, globals g=globals());
 
 parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &variables);

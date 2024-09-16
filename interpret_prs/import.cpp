@@ -7,7 +7,7 @@ namespace prs {
 
 const bool debug = false;
 
-vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_set &pr, int drain, int driver, int vdd, int gnd, boolean::cover assume, attributes attr, ucs::variable_set &variables, map<int, int> &nodemap, int default_id, tokenizer *tokens, bool auto_define)
+vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_set &pr, int drain, int driver, int vdd, int gnd, attributes attr, ucs::variable_set &variables, map<int, int> &nodemap, int default_id, tokenizer *tokens, bool auto_define)
 {
 	if (syntax.region != "")
 		default_id = atoi(syntax.region.c_str());
@@ -16,11 +16,8 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 	for (int i = (int)syntax.terms.size()-1; i >= 0; i--) {
 		if (debug) cout << "handling " << syntax.terms[i].to_string() << endl;
 		attributes termAttr = attr;
-		if (syntax.terms[i].width != "") {
-			termAttr.width = atof(syntax.terms[i].width.c_str());
-		}
-		if (syntax.terms[i].length != "") {
-			termAttr.length = atof(syntax.terms[i].width.c_str());
+		if (syntax.terms[i].size != "") {
+			termAttr.size = atof(syntax.terms[i].size.c_str());
 		}
 		if (syntax.terms[i].variant != "") {
 			termAttr.variant = syntax.terms[i].variant;
@@ -30,7 +27,7 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 		vector<int> net(1,to.back());
 		if (syntax.terms[i].sub.valid) {
 			if (debug) cout << "recursing" << endl;
-			net = import_guard(syntax.terms[i].sub, pr, to.back(), driver, vdd, gnd, assume, termAttr, variables, nodemap, default_id, tokens, auto_define);
+			net = import_guard(syntax.terms[i].sub, pr, to.back(), driver, vdd, gnd, termAttr, variables, nodemap, default_id, tokens, auto_define);
 			if (net.empty()) {
 				to.pop_back();
 			} else {
@@ -64,7 +61,7 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 
 			if (syntax.terms[i].ltrl.gate) {
 				if (debug) cout << "adding drain=" << to.back() << " gate=" << v.back() << " invert=" << syntax.terms[i].ltrl.invert << " driver=" << driver << endl;
-				to.back() = pr.add_source(v.back(), to.back(), syntax.terms[i].ltrl.invert ? 0 : 1, driver, assume, termAttr);
+				to.back() = pr.add_source(v.back(), to.back(), syntax.terms[i].ltrl.invert ? 0 : 1, driver, termAttr);
 				net.back() = to.back();
 				if (debug) cout << "sources net=" << to_string(net) << " to=" << to_string(to)  << endl;
 			} else {
@@ -79,7 +76,7 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 		}
 
 		if (syntax.level == parse_prs::guard::AND) {
-			assume = 1;
+			attr.set_internal();
 		}
 
 		// interpret the operators
@@ -89,7 +86,7 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 		} else if (i != 0 and syntax.level == parse_prs::guard::AND and syntax.terms[i].pchg.valid and not net.empty()) {
 			if (debug) cout << "recursing on precharge" << endl;
 			int subSource = driver == 1 ? vdd : gnd;
-			vector<int> otherSource = import_guard(syntax.terms[i].pchg, pr, net.back(), subSource, vdd, gnd, assume, attributes(), variables, nodemap, default_id, tokens, auto_define);
+			vector<int> otherSource = import_guard(syntax.terms[i].pchg, pr, net.back(), subSource, vdd, gnd, attributes(), variables, nodemap, default_id, tokens, auto_define);
 			if (debug) cout << "othersource=" << to_string(otherSource) << endl;
 			if (not otherSource.empty()) {
 				pr.connect(otherSource.back(), subSource);
@@ -129,10 +126,8 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 	if (syntax.after != std::numeric_limits<uint64_t>::max()) {
 		attr.delay_max = syntax.after;
 	}
-
-	boolean::cover assume=1;
 	if (syntax.assume.valid) {
-		assume = import_cover(syntax.assume, variables, default_id, tokens, auto_define);
+		attr.assume = import_cover(syntax.assume, variables, default_id, tokens, auto_define);
 	}
 
 	int driver = -1;
@@ -172,7 +167,7 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 			}
 		}
 
-		vector<int> result = import_guard(syntax.implicant, pr, v[0], driver, vdd, gnd, assume, attr, variables, nodemap, default_id, tokens, auto_define);
+		vector<int> result = import_guard(syntax.implicant, pr, v[0], driver, vdd, gnd, attr, variables, nodemap, default_id, tokens, auto_define);
 		if (not result.empty()) {
 			pr.connect(result.back(), driver == 1 ? vdd : gnd);
 			pr.replace(nodemap, result.back(), driver == 1 ? vdd : gnd);
