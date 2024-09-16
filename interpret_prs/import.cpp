@@ -34,7 +34,7 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 			}
 		} else if (syntax.terms[i].ltrl.valid) {
 			vector<int> v = define_variables(syntax.terms[i].ltrl.name, variables, default_id, tokens, auto_define, auto_define);
-			if (v.size() != 1 or v[0] < 0) {
+			if (v.size() != 1) {
 				if (tokens != NULL) {
 					tokens->load(&syntax.terms[i].ltrl.name);
 					tokens->error("literals must be a wire", __FILE__, __LINE__);
@@ -43,9 +43,11 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 				}
 			}
 			pr.create(v[0]);
-			for (int i = 0; i < (int)variables.nodes.size(); i++) {
-				if (v[0] != i and variables.nodes[i].name == variables.nodes[v[0]].name) {
-					pr.connect_remote(v[0], i);
+			if (v[0] >= 0) {
+				for (int i = 0; i < (int)variables.nodes.size(); i++) {
+					if (v[0] != i and variables.nodes[i].name == variables.nodes[v[0]].name) {
+						pr.connect_remote(v[0], i);
+					}
 				}
 			}
 
@@ -124,7 +126,7 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 		}
 
 		vector<int> v = define_variables(syntax.action.names[i], variables, action_id, tokens, auto_define, auto_define);
-		if (v.size() != 1 or v[0] < 0) {
+		if (v.size() != 1) {
 			if (tokens != NULL) {
 				tokens->load(&syntax.action.names[i]);
 				tokens->error("literals must be a wire", __FILE__, __LINE__);
@@ -133,9 +135,11 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 			}
 		}
 		pr.create(v[0], syntax.keep);
-		for (int i = 0; i < (int)variables.nodes.size(); i++) {
-			if (v[0] != i and variables.nodes[i].name == variables.nodes[v[0]].name) {
-				pr.connect_remote(v[0], i);
+		if (v[0] >= 0) {
+			for (int i = 0; i < (int)variables.nodes.size(); i++) {
+				if (v[0] != i and variables.nodes[i].name == variables.nodes[v[0]].name) {
+					pr.connect_remote(v[0], i);
+				}
 			}
 		}
 

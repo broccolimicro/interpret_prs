@@ -85,11 +85,16 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 
 					// Do the split
 					int drains = pr.drains(net, value);
-					if (pr.drains(net, value, weak ? 1 : 0, pass ? 1 : 0, stack[idx].assume) != drains) {
-						continue;
-					}
-
-					if (drains > 1) {
+					if (net != drain and pr.drains(net, value, weak ? 1 : 0, pass ? 1 : 0, stack[idx].assume) != drains) {
+						cout << "exiting at node " << net << endl;
+						if (stack[idx].drain != g.vdd and stack[idx].drain != g.gnd) {
+							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].drain, variables), false, false));
+							cout << "adding term " << arg.to_string() << endl;
+							stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
+						}
+						toErase.push_back(idx);
+					} else if (drains > 1) {
+						cout << drains << " drains at " << net << endl;
 						stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), parse_prs::term(parse_prs::guard()));
 						parse_prs::guard *sub = &stack[idx].stack.back()->terms[0].sub;
 						sub->valid = true;
@@ -97,7 +102,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 						sub->terms.reserve(drains*2);
 						for (int j = (int)pr.at(net).drainOf[value].size()-1; j >= 0; j--) {
 							auto dev = pr.devs.begin()+pr.at(net).drainOf[value][j];
+							cout << pr.at(net).drainOf[value][j] << endl;
 							if (dev->drain != net or dev->attr.weak != weak or dev->attr.pass != pass or dev->assume != assume) {
+								cout << "skipping" << endl;
 								continue;
 							}
 
@@ -121,21 +128,24 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							subj->terms.insert(subj->terms.begin(), arg);
 
 							if ((int)sub->terms.size() == drains) {
+								stack[idx].stack.push_back(subj);
+								stack[idx].drain = dev->source;
+								stack[idx].assume = 1;
+							} else {
 								stack.push_back(stack[idx]);
 								stack.back().stack.push_back(subj);
 								stack.back().drain = dev->source;
 								stack.back().assume = 1;
-							} else {
-								stack[idx].stack.push_back(subj);
-								stack[idx].drain = dev->source;
-								stack[idx].assume = 1;
 							}
 						}
 					} else if (drains != 0) {
+						cout << "one drain " << net << endl;
 						auto dev = pr.devs.begin()+pr.at(net).drainOf[value][0];
 						for (auto di = pr.at(net).drainOf[value].begin(); di != pr.at(net).drainOf[value].end(); di++) {
+							cout << *di << endl;
 							if (pr.devs[*di].drain == net and pr.devs[*di].attr.weak == weak and pr.devs[*di].attr.pass == pass and pr.devs[*di].assume == assume) {
 								dev = pr.devs.begin()+*di;
+								cout << "found" << endl;
 								break;
 							}
 						}
@@ -156,8 +166,10 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 						stack[idx].drain = dev->source;
 						stack[idx].assume = 1;
 					} else {
+						cout << "exiting node 2 " << net << endl;
 						if (stack[idx].drain != g.vdd and stack[idx].drain != g.gnd) {
 							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].drain, variables), false, false));
+							cout << "adding term " << arg.to_string() << endl;
 							stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
 						}
 						toErase.push_back(idx);
@@ -181,8 +193,10 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 	//   a. if none of the items in the stack pass the test, then we
 	//   stop here and those nodes become virtual nodes.
 	for (auto i = stack.begin(); i != stack.end(); i++) {
+		cout << "capping " << i->drain << endl;
 		if (i->drain != g.vdd and i->drain != g.gnd) {
 			parse_prs::term arg(parse_prs::literal(export_variable_name(i->drain, variables), false, false));
+			cout << "adding term " << arg.to_string() << endl;
 			i->stack.back()->terms.insert(i->stack.back()->terms.begin(), arg);
 		}
 
@@ -248,6 +262,7 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 	result.action.valid = true;
 	result.action.names.push_back(export_variable_name(net, variables));
 	result.action.operation = value == 1 ? "+" : "-";
+	cout << result.to_string() << endl;
 	return result;
 }
 
