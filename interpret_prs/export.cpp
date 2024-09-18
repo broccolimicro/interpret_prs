@@ -1,6 +1,7 @@
 #include "export.h"
 #include <interpret_boolean/export.h>
 #include <parse_dot/node_id.h>
+#include <common/text.h>
 
 namespace prs {
 
@@ -120,7 +121,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							// add this literal
 							parse_prs::term arg(parse_prs::literal(export_variable_name(dev->gate, variables), dev->threshold == 0));
 							if (dev->attr.size > 0.0) {
-								arg.size = to_string(dev->attr.size);
+								arg.size = to_minstring(dev->attr.size);
 								if (dev->attr.variant != "") {
 									arg.variant = dev->attr.variant;
 								}
@@ -160,7 +161,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 						// add this literal
 						parse_prs::term arg(parse_prs::literal(export_variable_name(dev->gate, variables), dev->threshold == 0));
 						if (dev->attr.size > 0.0) {
-							arg.size = to_string(dev->attr.size);
+							arg.size = to_minstring(dev->attr.size);
 							if (dev->attr.variant != "") {
 								arg.variant = dev->attr.variant;
 							}
@@ -301,9 +302,11 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 		}
 
 		for (int i = 0; i < 2; i++) {
-			auto groups = pr.attribute_groups(curr, i);
-			for (auto group = groups.begin(); group != groups.end(); group++) {
-				result.rules.push_back(export_production_rule(pr, variables, curr, i, *group, g, &stack, &covered));
+			if (pr.drains(curr,i) > 0) {
+				auto groups = pr.attribute_groups(curr, i);
+				for (auto group = groups.begin(); group != groups.end(); group++) {
+					result.rules.push_back(export_production_rule(pr, variables, curr, i, *group, g, &stack, &covered));
+				}
 			}
 		}
 	}
