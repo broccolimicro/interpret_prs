@@ -266,6 +266,7 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 	result.valid = true;
 	result.keep = pr.at(net).keep;
 	result.weak = attr.weak;
+	result.force = attr.force;
 	result.pass = attr.pass;
 	if (not attr.assume.is_tautology()) {
 		result.assume = export_expression_xfactor(attr.assume, variables);

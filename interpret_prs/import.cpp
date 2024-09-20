@@ -120,6 +120,9 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 	if (syntax.weak) {
 		attr.weak = true;
 	}
+	if (syntax.force) {
+		attr.force = true;
+	}
 	if (syntax.pass) {
 		attr.pass = true;
 	}
