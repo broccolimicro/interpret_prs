@@ -292,7 +292,9 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 	result.valid = true;
 	vector<int> stack, covered;
 	for (int i = -(int)pr.nodes.size(); i < (int)pr.nets.size(); i++) {
-		stack.push_back(i);
+		if ((pr.drains(i, 0) > 0 or pr.drains(i, 1) > 0) and (i >= 0 or (pr.sources(i, 0) == 0 and pr.sources(i, 1) == 0))) {
+			stack.push_back(i);
+		}
 	}
 
 	while (not stack.empty()) {
