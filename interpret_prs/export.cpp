@@ -95,6 +95,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].drain, variables), false, false));
 							if (debug) cout << "adding term " << arg.to_string() << endl;
 							stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
+							if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), stack[idx].drain) == covered->end())) {
+								next->push_back(stack[idx].drain);
+							}
 						}
 						toErase.push_back(idx);
 					} else if (drains > 1) {
@@ -183,6 +186,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].drain, variables), false, false));
 							if (debug) cout << "adding term " << arg.to_string() << endl;
 							stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
+							if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), stack[idx].drain) == covered->end())) {
+								next->push_back(stack[idx].drain);
+							}
 						}
 						toErase.push_back(idx);
 					}
