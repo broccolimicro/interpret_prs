@@ -202,6 +202,26 @@ void import_production_rule_set(const parse_prs::production_rule_set &syntax, pr
 	}
 	pr.set_power(vdd, gnd);
 
+	for (auto i = syntax.assume.begin(); i != syntax.assume.end(); i++) {
+		if (*i == "nobackflow") {
+			pr.assume_nobackflow = true;
+		} else if (*i == "static") {
+			pr.assume_static = true;
+		}
+	}
+
+	for (auto i = syntax.require.begin(); i != syntax.require.end(); i++) {
+		if (*i == "driven") {
+			pr.require_driven = true;
+		} else if (*i == "stable") {
+			pr.require_stable = true;
+		} else if (*i == "noninterfering") {
+			pr.require_noninterfering = true;
+		} else if (*i == "adiabatic") {
+			pr.require_adiabatic = true;
+		}
+	}
+
 	for (int i = 0; i < (int)syntax.rules.size(); i++) {
 		import_production_rule(syntax.rules[i], pr, vdd, gnd, attr, variables, nodemap, default_id, tokens, auto_define);
 	}
