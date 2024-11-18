@@ -88,7 +88,8 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 
 					// Do the split
 					int drains = pr.drains(net, value);
-					if (net != drain and pr.drains(net, value, stack[idx].attr) != drains) {
+					int drains0 = pr.drains(net, value, stack[idx].attr);
+					if (net != drain and drains0 != drains) {
 						// This is a source (either a pass transistor or power)
 						if (debug) cout << "exiting at node " << net << endl;
 						if (stack[idx].drain != g.vdd and stack[idx].drain != g.gnd) {
@@ -96,9 +97,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							if (debug) cout << "adding term " << arg.to_string() << endl;
 							if (not stack[idx].stack.empty()) {
 								stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
-							}
-							if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), stack[idx].drain) == covered->end())) {
-								next->push_back(stack[idx].drain);
+								if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), stack[idx].drain) == covered->end())) {
+									next->push_back(stack[idx].drain);
+								}
 							}
 						}
 						toErase.push_back(idx);
@@ -114,7 +115,11 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							auto dev = pr.devs.begin()+pr.at(net).drainOf[value][j];
 							if (debug) cout << pr.at(net).drainOf[value][j] << endl;
 							if (dev->drain != net or dev->attr != stack[idx].attr) {
-								if (debug) cout << "skipping" << endl;
+								if (debug) {
+									cout << "skipping " << dev->drain << "!=" << net << endl;
+									cout << "stack: " << stack[idx].attr.weak << " " << stack[idx].attr.force << " " << stack[idx].attr.pass << " " << stack[idx].attr.delay_max << " " << stack[idx].attr.assume << endl;
+									cout << "dev: " << dev->attr.weak << " " << dev->attr.force << " " << dev->attr.pass << " " << dev->attr.delay_max << " " << dev->attr.assume << endl;
+								}
 								continue;
 							}
 
@@ -140,17 +145,12 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 									covered->insert(pos, stack[idx].drain);
 								}
 							}
-							if ((int)sub->terms.size() == drains) {
-								stack[idx].stack.push_back(subj);
-								stack[idx].drain = dev->source;
-								stack[idx].attr.set_internal();
-							} else {
-								stack.push_back(stack[idx]);
-								stack.back().stack.push_back(subj);
-								stack.back().drain = dev->source;
-								stack.back().attr.set_internal();
-							}
+							stack.push_back(stack[idx]);
+							stack.back().stack.push_back(subj);
+							stack.back().drain = dev->source;
+							stack.back().attr.set_internal();
 						}
+						toErase.push_back(idx);
 					} else if (drains != 0) {
 						if (debug) cout << "one drain " << net << endl;
 						auto dev = pr.devs.begin()+pr.at(net).drainOf[value][0];
@@ -189,9 +189,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							if (debug) cout << "adding term " << arg.to_string() << endl;
 							if (not stack[idx].stack.empty()) {
 								stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
-							}
-							if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), stack[idx].drain) == covered->end())) {
-								next->push_back(stack[idx].drain);
+								if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), stack[idx].drain) == covered->end())) {
+									next->push_back(stack[idx].drain);
+								}
 							}
 						}
 						toErase.push_back(idx);
@@ -298,10 +298,6 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 
 parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, ucs::variable_set &variables, globals g)
 {
-	if (g.vdd < 0 and g.gnd < 0) {
-		g = globals(variables);
-	}
-
 	parse_prs::production_rule_set result;
 	result.valid = true;
 
@@ -323,6 +319,15 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 	}
 	if (pr.require_adiabatic) {
 		result.require.push_back("adiabatic");
+	}
+
+	if (g.vdd < 0 and g.gnd < 0) {
+		if (pr.pwr.empty()) {
+			g = globals(variables);
+		} else {
+			g.vdd = pr.pwr[0][1];
+			g.gnd = pr.pwr[0][0];
+		}
 	}
 
 	vector<int> stack, covered;
