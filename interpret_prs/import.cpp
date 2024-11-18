@@ -13,33 +13,33 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 		default_id = atoi(syntax.region.c_str());
 
 	vector<int> to(1, drain);
-	for (int i = (int)syntax.terms.size()-1; i >= 0; i--) {
-		if (debug) cout << "handling " << syntax.terms[i].to_string() << endl;
+	for (auto term = syntax.terms.rbegin(); term != syntax.terms.rend(); term++) {
+		if (debug) cout << "handling " << term->to_string() << endl;
 		attributes termAttr = attr;
-		if (syntax.terms[i].size != "") {
-			termAttr.size = atof(syntax.terms[i].size.c_str());
+		if (term->size != "") {
+			termAttr.size = atof(term->size.c_str());
 		}
-		if (syntax.terms[i].variant != "") {
-			termAttr.variant = syntax.terms[i].variant;
+		if (term->variant != "") {
+			termAttr.variant = term->variant;
 		}
 
 		// interpret the operands
 		vector<int> net(1,to.back());
-		if (syntax.terms[i].sub.valid) {
+		if (term->sub.valid) {
 			if (debug) cout << "recursing" << endl;
-			net = import_guard(syntax.terms[i].sub, pr, to.back(), driver, vdd, gnd, termAttr, variables, nodemap, default_id, tokens, auto_define);
+			net = import_guard(term->sub, pr, to.back(), driver, vdd, gnd, termAttr, variables, nodemap, default_id, tokens, auto_define);
 			if (net.empty()) {
 				to.pop_back();
 			} else {
 				to.back() = net.back();
 			}
 			if (debug) cout << "sources net=" << to_string(net) << " to=" << to_string(to)  << endl;
-		} else if (syntax.terms[i].ltrl.valid) {
+		} else if (term->ltrl.valid) {
 			if (debug) cout << "literal" << endl;
-			vector<int> v = define_variables(syntax.terms[i].ltrl.name, variables, default_id, tokens, auto_define, auto_define);
+			vector<int> v = define_variables(term->ltrl.name, variables, default_id, tokens, auto_define, auto_define);
 			if (v.size() != 1) {
 				if (tokens != NULL) {
-					tokens->load(&syntax.terms[i].ltrl.name);
+					tokens->load(&term->ltrl.name);
 					tokens->error("literals must be a wire", __FILE__, __LINE__);
 				} else {
 					error(syntax.to_string(), "literals must be a wire", __FILE__, __LINE__);
@@ -59,9 +59,9 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 
 			if (debug) cout << "created " << to_string(v) << endl;
 
-			if (syntax.terms[i].ltrl.gate) {
-				if (debug) cout << "adding drain=" << to.back() << " gate=" << v.back() << " invert=" << syntax.terms[i].ltrl.invert << " driver=" << driver << endl;
-				to.back() = pr.add_source(v.back(), to.back(), syntax.terms[i].ltrl.invert ? 0 : 1, driver, termAttr);
+			if (term->ltrl.gate) {
+				if (debug) cout << "adding drain=" << to.back() << " gate=" << v.back() << " invert=" << term->ltrl.invert << " driver=" << driver << endl;
+				to.back() = pr.add_source(v.back(), to.back(), term->ltrl.invert ? 0 : 1, driver, termAttr);
 				net.back() = to.back();
 				if (debug) cout << "sources net=" << to_string(net) << " to=" << to_string(to)  << endl;
 			} else {
@@ -80,13 +80,13 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 		}
 
 		// interpret the operators
-		if (i != 0 and syntax.level == parse_prs::guard::OR) {
+		if (next(term) != syntax.terms.rend() and syntax.level == parse_prs::guard::OR) {
 			to.push_back(drain);
 			if (debug) cout << "adding parallel split " << to_string(to) << endl;
-		} else if (i != 0 and syntax.level == parse_prs::guard::AND and syntax.terms[i].pchg.valid and not net.empty()) {
+		} else if (next(term) != syntax.terms.rend() and syntax.level == parse_prs::guard::AND and term->pchg.valid and not net.empty()) {
 			if (debug) cout << "recursing on precharge" << endl;
 			int subSource = driver == 1 ? vdd : gnd;
-			vector<int> otherSource = import_guard(syntax.terms[i].pchg, pr, net.back(), subSource, vdd, gnd, attributes(), variables, nodemap, default_id, tokens, auto_define);
+			vector<int> otherSource = import_guard(term->pchg, pr, net.back(), subSource, vdd, gnd, attributes(), variables, nodemap, default_id, tokens, auto_define);
 			if (debug) cout << "othersource=" << to_string(otherSource) << endl;
 			if (not otherSource.empty()) {
 				pr.connect(otherSource.back(), subSource);

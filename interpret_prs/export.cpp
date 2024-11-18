@@ -83,7 +83,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 
 					// Handle precharge
 					if (net != drain and not stack[idx].stack.back()->terms.empty() and pr.drains(net, 1-value) != 0) {
-						stack[idx].stack.back()->terms[0].pchg = export_guard(pr, variables, net, 1-value, attr, g, next, covered);
+						stack[idx].stack.back()->terms.begin()->pchg = export_guard(pr, variables, net, 1-value, attr, g, next, covered);
 					}
 
 					// Do the split
@@ -94,7 +94,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 						if (stack[idx].drain != g.vdd and stack[idx].drain != g.gnd) {
 							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].drain, variables), false, false));
 							if (debug) cout << "adding term " << arg.to_string() << endl;
-							stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
+							if (not stack[idx].stack.empty()) {
+								stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
+							}
 							if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), stack[idx].drain) == covered->end())) {
 								next->push_back(stack[idx].drain);
 							}
@@ -104,10 +106,10 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 						// This is a split
 						if (debug) cout << drains << " drains at " << net << endl;
 						stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), parse_prs::term(parse_prs::guard()));
-						parse_prs::guard *sub = &stack[idx].stack.back()->terms[0].sub;
+						parse_prs::guard *sub = &stack[idx].stack.back()->terms.begin()->sub;
 						sub->valid = true;
 						sub->level = parse_prs::guard::OR;
-						sub->terms.reserve(drains*2);
+						//sub->terms.reserve(drains*2);
 						for (int j = (int)pr.at(net).drainOf[value].size()-1; j >= 0; j--) {
 							auto dev = pr.devs.begin()+pr.at(net).drainOf[value][j];
 							if (debug) cout << pr.at(net).drainOf[value][j] << endl;
@@ -125,7 +127,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 							parse_prs::term arg(parse_prs::literal(export_variable_name(dev->gate, variables), dev->threshold == 0));
 							if (dev->attr.size > 0.0) {
 								arg.size = to_minstring(dev->attr.size);
-								if (dev->attr.variant != "") {
+								if (dev->attr.variant != "" and dev->attr.variant != "svt") {
 									arg.variant = dev->attr.variant;
 								}
 							}
@@ -165,7 +167,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 						parse_prs::term arg(parse_prs::literal(export_variable_name(dev->gate, variables), dev->threshold == 0));
 						if (dev->attr.size > 0.0) {
 							arg.size = to_minstring(dev->attr.size);
-							if (dev->attr.variant != "") {
+							if (dev->attr.variant != "" and dev->attr.variant != "svt") {
 								arg.variant = dev->attr.variant;
 							}
 						}
@@ -185,7 +187,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 						if (stack[idx].drain != g.vdd and stack[idx].drain != g.gnd) {
 							parse_prs::term arg(parse_prs::literal(export_variable_name(stack[idx].drain, variables), false, false));
 							if (debug) cout << "adding term " << arg.to_string() << endl;
-							stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
+							if (not stack[idx].stack.empty()) {
+								stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
+							}
 							if (next != nullptr and (covered == nullptr or find(covered->begin(), covered->end(), stack[idx].drain) == covered->end())) {
 								next->push_back(stack[idx].drain);
 							}
@@ -235,27 +239,31 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_
 		auto curr = walk.back();
 		walk.pop_back();
 
-		for (int i = (int)curr->terms.size()-1; i >= 0; i--) {
-			if ((not curr->terms[i].sub.valid and not curr->terms[i].ltrl.valid)
-				or (curr->terms[i].sub.valid and curr->terms[i].sub.terms.empty())) {
-				curr->terms.erase(curr->terms.begin()+i);
+		for (auto term = curr->terms.begin(); term != curr->terms.end();) {
+			if ((not term->sub.valid and not term->ltrl.valid)
+				or (term->sub.valid and term->sub.terms.empty())) {
+				term = curr->terms.erase(term);
+			} else {
+				term++;
 			}
 		}
 
-		while (curr->terms.size() == 1 and curr->terms[0].sub.valid) {
+		while (curr->terms.size() == 1 and curr->terms.begin()->sub.valid) {
 			// assigning *curr = curr->terms[0].sub; assigns curr->terms first which destroys the thing we're assigning from.
-			parse_prs::guard tmp = curr->terms[0].sub;
+			parse_prs::guard tmp = curr->terms.begin()->sub;
 			*curr = tmp;
-			for (int i = (int)curr->terms.size()-1; i >= 0; i--) {
-				if ((not curr->terms[i].sub.valid and not curr->terms[i].ltrl.valid)
-					or (curr->terms[i].sub.valid and curr->terms[i].sub.terms.empty())) {
-					curr->terms.erase(curr->terms.begin()+i);
+			for (auto term = curr->terms.begin(); term != curr->terms.end();) {
+				if ((not term->sub.valid and not term->ltrl.valid)
+					or (term->sub.valid and term->sub.terms.empty())) {
+					term = curr->terms.erase(term);
+				} else {
+					term++;
 				}
 			}
 		}
 
-		for (int i = 0; i < (int)curr->terms.size(); i++) {
-			walk.push_back(&curr->terms[i].sub);
+		for (auto term = curr->terms.begin(); term != curr->terms.end(); term++) {
+			walk.push_back(&term->sub);
 		}
 	}
 
