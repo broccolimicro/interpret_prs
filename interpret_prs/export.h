@@ -1,15 +1,5 @@
-/*
- * export.h
- *
- *  Created on: Feb 6, 2015
- *      Author: nbingham
- */
-
 #pragma once
 
-#include <common/standard.h>
-
-#include <ucs/variable.h>
 #include <prs/production_rule.h>
 #include <prs/bubble.h>
 
@@ -18,21 +8,25 @@
 #include <parse_dot/graph.h>
 #include <parse_spice/subckt.h>
 
+#include <interpret_boolean/interface.h>
+
 namespace prs {
 
 struct globals {
 	globals();
-	globals(ucs::variable_set &variables);
+	globals(const prs::production_rule_set &pr);
 	~globals();
 
 	int vdd;
 	int gnd;
+
+	operator bool();
 };
 
-parse_prs::guard export_guard(const prs::production_rule_set &pr, ucs::variable_set &variables, int drain, int value, prs::attributes attr=attributes(), globals g=globals(), vector<int> *next=nullptr, vector<int> *covered=nullptr);
-parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, ucs::variable_set &variables, int net, int value, prs::attributes attr=attributes(), globals g=globals(), vector<int> *next=nullptr, vector<int> *covered=nullptr);
-parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, ucs::variable_set &variables, globals g=globals());
+parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int value, prs::attributes attr=attributes(), globals g=globals(), vector<int> *next=nullptr, vector<int> *covered=nullptr);
+parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, int net, int value, prs::attributes attr=attributes(), globals g=globals(), vector<int> *next=nullptr, vector<int> *covered=nullptr);
+parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, globals g=globals());
 
-parse_dot::graph export_bubble(const prs::bubble &bub, const ucs::variable_set &variables);
+parse_dot::graph export_bubble(const prs::bubble &bub);
 
 }

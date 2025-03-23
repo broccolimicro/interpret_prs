@@ -1,13 +1,14 @@
 #include "import.h"
 
-#include <interpret_ucs/import.h>
+#include <common/standard.h>
+
 #include <interpret_boolean/import.h>
 
 namespace prs {
 
 const bool debug = false;
 
-vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_set &pr, int drain, int driver, int vdd, int gnd, attributes attr, ucs::variable_set &variables, map<int, int> &nodemap, int default_id, tokenizer *tokens, bool auto_define)
+vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_set &pr, int drain, int driver, int vdd, int gnd, attributes attr, int default_id, tokenizer *tokens, bool auto_define)
 {
 	if (syntax.region != "")
 		default_id = atoi(syntax.region.c_str());
@@ -27,7 +28,7 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 		vector<int> net(1,to.back());
 		if (term->sub.valid) {
 			if (debug) cout << "recursing" << endl;
-			net = import_guard(term->sub, pr, to.back(), driver, vdd, gnd, termAttr, variables, nodemap, default_id, tokens, auto_define);
+			net = import_guard(term->sub, pr, to.back(), driver, vdd, gnd, termAttr, default_id, tokens, auto_define);
 			if (net.empty()) {
 				to.pop_back();
 			} else {
@@ -36,39 +37,18 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 			if (debug) cout << "sources net=" << to_string(net) << " to=" << to_string(to)  << endl;
 		} else if (term->ltrl.valid) {
 			if (debug) cout << "literal" << endl;
-			vector<int> v = define_variables(term->ltrl.name, variables, default_id, tokens, auto_define, auto_define);
-			if (v.size() != 1) {
-				if (tokens != NULL) {
-					tokens->load(&term->ltrl.name);
-					tokens->error("literals must be a wire", __FILE__, __LINE__);
-				} else {
-					error(syntax.to_string(), "literals must be a wire", __FILE__, __LINE__);
-				}
-			}
-			if (v[0] < 0) {
-				v[0] = nodemap.insert(pair<int, int>(v[0], pr.flip(pr.nodes.size()))).first->second;
-			}
-			pr.create(v[0]);
-			if (v[0] >= 0) {
-				for (int i = 0; i < (int)variables.nodes.size(); i++) {
-					if (v[0] != i and variables.nodes[i].name == variables.nodes[v[0]].name) {
-						pr.connect_remote(v[0], i);
-					}
-				}
-			}
-
-			if (debug) cout << "created " << to_string(v) << endl;
+			int uid = boolean::import_net(term->ltrl.name, pr, default_id, tokens, auto_define);
+			if (debug) cout << "created " << to_string(uid) << endl;
 
 			if (term->ltrl.gate) {
-				if (debug) cout << "adding drain=" << to.back() << " gate=" << v.back() << " invert=" << term->ltrl.invert << " driver=" << driver << endl;
-				to.back() = pr.add_source(v.back(), to.back(), term->ltrl.invert ? 0 : 1, driver, termAttr);
+				if (debug) cout << "adding drain=" << to.back() << " gate=" << uid << " invert=" << term->ltrl.invert << " driver=" << driver << endl;
+				to.back() = pr.add_source(uid, to.back(), term->ltrl.invert ? 0 : 1, driver, termAttr);
 				net.back() = to.back();
 				if (debug) cout << "sources net=" << to_string(net) << " to=" << to_string(to)  << endl;
 			} else {
-				if (debug) cout << "adding pass " << to.back() << "<->" << v.back() << endl;
-				pr.connect(to.back(), v.back());
-				pr.replace(to, to.back(), v.back());
-				pr.replace(nodemap, to.back(), v.back());
+				if (debug) cout << "adding pass " << to.back() << "<->" << uid << endl;
+				pr.connect(to.back(), uid);
+				pr.replace(to, to.back(), uid);
 				to.pop_back();
 				net.clear();
 				if (debug) cout << "sources net=" << to_string(net) << " to=" << to_string(to)  << endl;
@@ -86,12 +66,11 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 		} else if (next(term) != syntax.terms.rend() and syntax.level == parse_prs::guard::AND and term->pchg.valid and not net.empty()) {
 			if (debug) cout << "recursing on precharge" << endl;
 			int subSource = driver == 1 ? vdd : gnd;
-			vector<int> otherSource = import_guard(term->pchg, pr, net.back(), subSource, vdd, gnd, attributes(), variables, nodemap, default_id, tokens, auto_define);
+			vector<int> otherSource = import_guard(term->pchg, pr, net.back(), subSource, vdd, gnd, attributes(), default_id, tokens, auto_define);
 			if (debug) cout << "othersource=" << to_string(otherSource) << endl;
 			if (not otherSource.empty()) {
 				pr.connect(otherSource.back(), subSource);
 				pr.replace(to, otherSource.back(), subSource);
-				pr.replace(nodemap, otherSource.back(), subSource);
 				if (debug) cout << "to=" << to_string(to)  << endl;
 			}
 		}
@@ -108,14 +87,13 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 
 		pr.connect(curr, to[0]);
 		pr.replace(to, curr, to[0]);
-		pr.replace(nodemap, curr, to[0]);
 		if (debug) cout << "tying up to=" << to_string(to) << endl;
 	}
 
 	return to;
 }
 
-void import_production_rule(const parse_prs::production_rule &syntax, prs::production_rule_set &pr, int vdd, int gnd, attributes attr, ucs::variable_set &variables, map<int, int> &nodemap, int default_id, tokenizer *tokens, bool auto_define)
+void import_production_rule(const parse_prs::production_rule &syntax, prs::production_rule_set &pr, int vdd, int gnd, attributes attr, int default_id, tokenizer *tokens, bool auto_define)
 {
 	if (syntax.weak) {
 		attr.weak = true;
@@ -126,11 +104,12 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 	if (syntax.pass) {
 		attr.pass = true;
 	}
+	// TODO(edward.bingham) I need after for the minimum delay and within for maximum delay
 	if (syntax.after != std::numeric_limits<uint64_t>::max()) {
 		attr.delay_max = syntax.after;
 	}
 	if (syntax.assume.valid) {
-		attr.assume = import_cover(syntax.assume, variables, default_id, tokens, auto_define);
+		attr.assume = boolean::import_cover(syntax.assume, pr, default_id, tokens, auto_define);
 	}
 
 	int driver = -1;
@@ -148,58 +127,29 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 			action_id = atoi(syntax.action.region.c_str());
 		}
 
-		vector<int> v = define_variables(syntax.action.names[i], variables, action_id, tokens, auto_define, auto_define);
-		if (v.size() != 1) {
-			if (tokens != NULL) {
-				tokens->load(&syntax.action.names[i]);
-				tokens->error("literals must be a wire", __FILE__, __LINE__);
-			} else {
-				error(syntax.to_string(), "literals must be a wire", __FILE__, __LINE__);
-			}
-		}
-		if (v[0] < 0) {
-			v[0] = nodemap.insert(pair<int, int>(v[0], pr.flip(pr.nodes.size()))).first->second;
-		}
+		int uid = boolean::import_net(syntax.action.names[i], pr, action_id, tokens, auto_define);
+		pr.nets[uid].keep = syntax.keep;
 
-		pr.create(v[0], syntax.keep);
-		if (v[0] >= 0) {
-			for (int i = 0; i < (int)variables.nodes.size(); i++) {
-				if (v[0] != i and variables.nodes[i].name == variables.nodes[v[0]].name) {
-					pr.connect_remote(v[0], i);
-				}
-			}
-		}
-
-		vector<int> result = import_guard(syntax.implicant, pr, v[0], driver, vdd, gnd, attr, variables, nodemap, default_id, tokens, auto_define);
+		vector<int> result = import_guard(syntax.implicant, pr, uid, driver, vdd, gnd, attr, default_id, tokens, auto_define);
 		if (not result.empty()) {
 			pr.connect(result.back(), driver == 1 ? vdd : gnd);
-			pr.replace(nodemap, result.back(), driver == 1 ? vdd : gnd);
 		}
 	}
 }
 
-void import_production_rule_set(const parse_prs::production_rule_set &syntax, prs::production_rule_set &pr, int vdd, int gnd, attributes attr, ucs::variable_set &variables, map<int, int> &nodemap, int default_id, tokenizer *tokens, bool auto_define)
+void import_production_rule_set(const parse_prs::production_rule_set &syntax, prs::production_rule_set &pr, int vdd, int gnd, attributes attr, int default_id, tokenizer *tokens, bool auto_define)
 {
 	if (syntax.region != "") {
 		default_id = atoi(syntax.region.c_str());
 	}
 
 	if (gnd < 0) {
-		gnd = variables.find(ucs::variable("GND"));
-	}
-	if (gnd < 0) {
-		gnd = variables.define(ucs::variable("GND"));
+		gnd = pr.netIndex("GND", 0, true);
 	}
 	if (vdd < 0) {
-		vdd = variables.find(ucs::variable("Vdd"));
-	}
-	if (vdd < 0) {
-		vdd = variables.define(ucs::variable("Vdd"));
+		vdd = pr.netIndex("Vdd", 0, true);
 	}
 
-	if (pr.nets.size() < variables.nodes.size()) {
-		pr.create(variables.nodes.size()-1);
-	}
 	pr.set_power(vdd, gnd);
 
 	for (auto i = syntax.assume.begin(); i != syntax.assume.end(); i++) {
@@ -223,11 +173,11 @@ void import_production_rule_set(const parse_prs::production_rule_set &syntax, pr
 	}
 
 	for (int i = 0; i < (int)syntax.rules.size(); i++) {
-		import_production_rule(syntax.rules[i], pr, vdd, gnd, attr, variables, nodemap, default_id, tokens, auto_define);
+		import_production_rule(syntax.rules[i], pr, vdd, gnd, attr, default_id, tokens, auto_define);
 	}
 
 	for (int i = 0; i < (int)syntax.regions.size(); i++) {
-		import_production_rule_set(syntax.regions[i], pr, vdd, gnd, attr, variables, nodemap, default_id, tokens, auto_define);
+		import_production_rule_set(syntax.regions[i], pr, vdd, gnd, attr, default_id, tokens, auto_define);
 	}
 }
 
