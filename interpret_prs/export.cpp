@@ -7,7 +7,7 @@
 
 namespace prs {
 
-const bool debug = false;
+const bool debug = true;
 
 globals::globals() {
 	vdd = -1;
@@ -96,6 +96,10 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 
 					int idx = i->second[k][0];
 					int net = i->first;
+					if (net >= (int)pr.nets.size()) {
+						printf("error: net out of bounds\n");
+						return result;
+					}
 
 					// Handle precharge
 					if (net != drain and not stack[idx].stack.back()->terms.empty() and pr.drains(net, 1-value) != 0) {
@@ -171,7 +175,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 						if (debug) cout << "one drain " << net << endl;
 						auto dev = pr.devs.begin()+pr.nets[net].drainOf[value][0];
 						for (auto di = pr.nets[net].drainOf[value].begin(); di != pr.nets[net].drainOf[value].end(); di++) {
-							if (debug) cout << *di << endl;
+							if (debug) cout << "dev=" << *di << "/" << pr.devs.size() << endl;
 							if (pr.devs[*di].drain == net and pr.devs[*di].attr == attr) {
 								dev = pr.devs.begin()+*di;
 								if (debug) cout << "found" << endl;
@@ -313,6 +317,8 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 
 parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, globals g)
 {
+	pr.print();
+
 	parse_prs::production_rule_set result;
 	result.valid = true;
 
