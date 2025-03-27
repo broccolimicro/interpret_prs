@@ -7,7 +7,7 @@
 
 namespace prs {
 
-const bool debug = true;
+const bool debug = false;
 
 globals::globals() {
 	vdd = -1;
@@ -317,8 +317,6 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 
 parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, globals g)
 {
-	pr.print();
-
 	parse_prs::production_rule_set result;
 	result.valid = true;
 
