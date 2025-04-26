@@ -8,8 +8,6 @@
 #include <parse_dot/graph.h>
 #include <parse_spice/subckt.h>
 
-#include <interpret_boolean/interface.h>
-
 namespace prs {
 
 struct globals {
