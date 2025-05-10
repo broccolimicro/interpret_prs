@@ -144,10 +144,10 @@ void import_production_rule_set(const parse_prs::production_rule_set &syntax, pr
 	}
 
 	if (gnd < 0) {
-		gnd = pr.netIndex(ucs::Net("GND", 0), true);
+		gnd = pr.netIndex("GND", true);
 	}
 	if (vdd < 0) {
-		vdd = pr.netIndex(ucs::Net("Vdd", 0), true);
+		vdd = pr.netIndex("Vdd", true);
 	}
 
 	pr.set_power(vdd, gnd);
