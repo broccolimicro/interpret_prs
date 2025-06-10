@@ -309,7 +309,7 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 	}
 	result.implicant = export_guard(pr, net, value, attr, g, next, covered);
 	result.action.valid = true;
-	result.action.names.push_back(ucs::Net(pr.netAt(net)));
+	result.action.lvalue.push_back(boolean::export_net(net, pr));
 	result.action.operation = value == 1 ? "+" : "-";
 	if (debug) cout << result.to_string() << endl;
 	return result;

@@ -37,7 +37,12 @@ vector<int> import_guard(const parse_prs::guard &syntax, prs::production_rule_se
 			if (debug) cout << "sources net=" << to_string(net) << " to=" << to_string(to)  << endl;
 		} else if (term->ltrl.valid) {
 			if (debug) cout << "literal" << endl;
-			int uid = boolean::import_net(term->ltrl.name, pr, default_id, tokens, auto_define);
+			
+			auto name = term->ltrl.name;
+			if (default_id != 0) {
+				name.region = ::to_string(default_id);
+			}
+			int uid = boolean::import_net(name.to_string(""), pr, tokens, auto_define);
 			if (debug) cout << "created " << to_string(uid) << endl;
 
 			if (term->ltrl.gate) {
@@ -113,7 +118,7 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 	}
 
 	int driver = -1;
-	for (int i = 0; i < (int)syntax.action.names.size(); i++) {
+	for (int i = 0; i < (int)syntax.action.lvalue.size(); i++) {
 		if (syntax.action.operation == "+") {
 			driver = 1;
 		} else if (syntax.action.operation == "-") {
@@ -127,7 +132,7 @@ void import_production_rule(const parse_prs::production_rule &syntax, prs::produ
 			action_id = atoi(syntax.action.region.c_str());
 		}
 
-		int uid = boolean::import_net(syntax.action.names[i], pr, action_id, tokens, auto_define);
+		int uid = boolean::import_net(syntax.action.lvalue[i], pr, action_id, tokens, auto_define);
 		pr.nets[uid].keep = syntax.keep;
 
 		vector<int> result = import_guard(syntax.implicant, pr, uid, driver, vdd, gnd, attr, default_id, tokens, auto_define);
