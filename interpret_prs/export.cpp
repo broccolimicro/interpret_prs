@@ -302,14 +302,14 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 	result.force = attr.force;
 	result.pass = attr.pass;
 	if (not attr.assume.is_tautology()) {
-		result.assume = boolean::export_expression_xfactor(attr.assume, pr);
+		result.assume = boolean::export_expression_xfactor<parse_prs::expression>(attr.assume, pr);
 	}
 	if (attr.delay_max != attributes().delay_max) {
 		result.after = attr.delay_max;
 	}
 	result.implicant = export_guard(pr, net, value, attr, g, next, covered);
 	result.action.valid = true;
-	result.action.lvalue.push_back(boolean::export_net(net, pr));
+	result.action.lvalue.push_back(boolean::export_net<parse_prs::expression>(net, pr));
 	result.action.operation = value == 1 ? "+" : "-";
 	if (debug) cout << result.to_string() << endl;
 	return result;
