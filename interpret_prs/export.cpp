@@ -291,6 +291,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 }
 
 parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, int net, int value, prs::attributes attr, globals g, vector<int> *next, vector<int> *covered) {
+	parse_prs::setup_expressions();
 	if (not g) {
 		g = globals(pr);
 	}
@@ -317,6 +318,7 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 
 parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, globals g)
 {
+	parse_prs::setup_expressions();
 	parse_prs::production_rule_set result;
 	result.valid = true;
 
