@@ -113,7 +113,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 						// This is a source (either a pass transistor or power)
 						if (debug) cout << "exiting at node " << net << endl;
 						if (stack[idx].drain != g.vdd and stack[idx].drain != g.gnd) {
-							parse_prs::term arg(parse_prs::literal(ucs::Net(pr.netAt(stack[idx].drain)), false, false));
+							parse_prs::term arg(parse_prs::literal(pr.netAt(stack[idx].drain), false, false));
 							if (debug) cout << "adding term " << arg.to_string() << endl;
 							if (not stack[idx].stack.empty()) {
 								stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
@@ -149,7 +149,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 							subj->level = parse_prs::guard::AND;
 
 							// add this literal
-							parse_prs::term arg(parse_prs::literal(ucs::Net(pr.netAt(dev->gate)), dev->threshold == 0));
+							parse_prs::term arg(parse_prs::literal(pr.netAt(dev->gate), dev->threshold == 0));
 							if (dev->attr.size > 0.0) {
 								arg.size = to_minstring(dev->attr.size);
 								if (dev->attr.variant != "" and dev->attr.variant != "svt") {
@@ -184,7 +184,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 						}
 
 						// add this literal
-						parse_prs::term arg(parse_prs::literal(ucs::Net(pr.netAt(dev->gate)), dev->threshold == 0));
+						parse_prs::term arg(parse_prs::literal(pr.netAt(dev->gate), dev->threshold == 0));
 						if (dev->attr.size > 0.0) {
 							arg.size = to_minstring(dev->attr.size);
 							if (dev->attr.variant != "" and dev->attr.variant != "svt") {
@@ -205,7 +205,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 					} else {
 						if (debug) cout << "exiting node 2 " << net << endl;
 						if (stack[idx].drain != g.vdd and stack[idx].drain != g.gnd) {
-							parse_prs::term arg(parse_prs::literal(ucs::Net(pr.netAt(stack[idx].drain)), false, false));
+							parse_prs::term arg(parse_prs::literal(pr.netAt(stack[idx].drain), false, false));
 							if (debug) cout << "adding term " << arg.to_string() << endl;
 							if (not stack[idx].stack.empty()) {
 								stack[idx].stack.back()->terms.insert(stack[idx].stack.back()->terms.begin(), arg);
@@ -237,7 +237,7 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 	for (auto i = stack.begin(); i != stack.end(); i++) {
 		if (debug) cout << "capping " << i->drain << endl;
 		if (i->drain != g.vdd and i->drain != g.gnd) {
-			parse_prs::term arg(parse_prs::literal(ucs::Net(pr.netAt(i->drain)), false, false));
+			parse_prs::term arg(parse_prs::literal(pr.netAt(i->drain), false, false));
 			if (debug) cout << "adding term " << arg.to_string() << endl;
 			i->stack.back()->terms.insert(i->stack.back()->terms.begin(), arg);
 		}
