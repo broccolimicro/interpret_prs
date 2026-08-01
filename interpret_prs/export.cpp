@@ -7,8 +7,6 @@
 
 namespace prs {
 
-const bool debug = false;
-
 globals::globals() {
 	vdd = -1;
 	gnd = -1;
@@ -42,15 +40,154 @@ globals::operator bool() {
 	return gnd >= 0 and vdd >= 0;
 }
 
-parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int value, attributes attr, globals g, vector<int> *next, vector<int> *covered) {
+}
+
+namespace parse_prs {
+
+const bool debug = false;
+
+BooleanExpressionExporter::BooleanExpressionExporter(ucs::ConstNetlist nets) : nets(nets) {
+}
+
+BooleanExpressionExporter::~BooleanExpressionExporter() {
+}
+
+parse_expression::operation BooleanExpressionExporter::export_operator(int func) const {
+	using operation = parse_expression::operation;
+
+	switch (func) {
+	case NOT: return operation("~", "", "", "");
+	case INTERFERE: return operation("?", "", "", "");
+	case AND: return operation("", "", "&", "");
+	case OR: return operation("", "", "|", "");
+	}
+	return operation();
+}
+
+const parse_expression::precedence_set &BooleanExpressionExporter::precedence() const {
+	return expression_config::cfg->order;
+}
+
+parse_expression::expression::argument BooleanExpressionExporter::export_constant(int value) const {
+	constant_expression result;
+	result.value = boolean::export_value(value);
+	return {0, std::shared_ptr<parse::syntax>(result.clone())};
+}
+
+parse_expression::expression::argument BooleanExpressionExporter::export_literal(size_t index) const {
+	literal_expression result;
+	result.name = nets.netAt(index);
+	return {1, std::shared_ptr<parse::syntax>(result.clone())};
+}
+
+parse_expression::expression export_expression(boolean::cube expr, ucs::ConstNetlist nets) {
+	return BooleanExpressionExporter(nets).export_expression(expr);
+}
+
+parse_expression::expression export_expression(boolean::cover expr, ucs::ConstNetlist nets) {
+	return BooleanExpressionExporter(nets).export_expression(expr);
+}
+
+parse_expression::expression export_expression_xfactor(boolean::cover expr, ucs::ConstNetlist nets) {
+	return BooleanExpressionExporter(nets).export_expression_xfactor(expr);
+}
+
+parse_expression::expression export_expression_hfactor(boolean::cover expr, ucs::ConstNetlist nets) {
+	return BooleanExpressionExporter(nets).export_expression_hfactor(expr);
+}
+
+BooleanCompositionExporter::BooleanCompositionExporter(ucs::ConstNetlist nets) : nets(nets) {
+}
+
+BooleanCompositionExporter::~BooleanCompositionExporter() {
+}
+
+parse_expression::operation BooleanCompositionExporter::export_operator(int func) const {
+	using operation = parse_expression::operation;
+
+	switch (func) {
+	case AND: return operation("", "", ",", "");
+	case OR: return operation("", "", ":", "");
+	}
+	return operation();
+}
+
+const parse_expression::precedence_set &BooleanCompositionExporter::precedence() const {
+	return composition_config::cfg->order;
+}
+
+parse_expression::expression::argument BooleanCompositionExporter::export_constant(int value) const {
+	assignment result;
+	result.valid = true;
+	return {1, std::shared_ptr<parse::syntax>(result.clone())};
+}
+
+parse_expression::expression::argument BooleanCompositionExporter::export_literal(size_t index) const {
+	literal result;
+	result.name = nets.netAt(index);
+	return {1, std::shared_ptr<parse::syntax>(result.clone())};
+}
+
+assignment BooleanCompositionExporter::export_assignment(size_t index, int value) const {
+	assignment result;
+	result.valid = true;
+	if (value >= 2) {
+		return result;
+	}
+
+	parse_expression::expression lvalue;
+	lvalue.valid = true;
+	lvalue.level = 0;
+	lvalue.type = expression_config::cfg->order.type(0);
+	lvalue.arguments.push_back(export_literal(index));
+	result.left.push_back(lvalue);
+
+	if (value == 0) {
+		result.operation = "-";
+	} else if (value == 1) {
+		result.operation = "+";
+	} else {
+		result.operation = "~";
+	}
+
+	return result;
+}
+
+parse_expression::expression::argument BooleanCompositionExporter::export_term(size_t index, int value) const {
+	return {1, std::shared_ptr<parse::syntax>(export_assignment(index, value).clone())};
+}
+
+assignment export_assignment(size_t index, int value, ucs::ConstNetlist nets) {
+	return BooleanCompositionExporter(nets).export_assignment(index, value);
+}
+
+parse_expression::expression export_composition(boolean::cube expr, ucs::ConstNetlist nets) {
+	return BooleanCompositionExporter(nets).export_expression(expr);
+}
+
+parse_expression::expression export_composition(boolean::cover expr, ucs::ConstNetlist nets) {
+	return BooleanCompositionExporter(nets).export_expression(expr);
+}
+
+parse_expression::expression export_composition_xfactor(boolean::cover expr, ucs::ConstNetlist nets) {
+	return BooleanCompositionExporter(nets).export_expression_xfactor(expr);
+}
+
+parse_expression::expression export_composition_hfactor(boolean::cover expr, ucs::ConstNetlist nets) {
+	return BooleanCompositionExporter(nets).export_expression_hfactor(expr);
+}
+
+
+
+parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int value, prs::attributes attr, prs::globals g, vector<int> *next, vector<int> *covered) {
 	struct walker {
 		int drain;
 		vector<parse_prs::guard*> stack;
-		attributes attr;
+		prs::attributes attr;
 	};
 
 	if (not g) {
-		g = globals(pr);
+		g = prs::globals(pr);
 	}
 
 	parse_prs::guard result;
@@ -290,10 +427,9 @@ parse_prs::guard export_guard(const prs::production_rule_set &pr, int drain, int
 	return result;
 }
 
-parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, int net, int value, prs::attributes attr, globals g, vector<int> *next, vector<int> *covered) {
-	parse_prs::setup_expressions();
+parse_prs::production_rule export_production_rule(const prs::production_rule_set &pr, int net, int value, prs::attributes attr, prs::globals g, vector<int> *next, vector<int> *covered) {
 	if (not g) {
-		g = globals(pr);
+		g = prs::globals(pr);
 	}
 
 	parse_prs::production_rule result;
@@ -303,22 +439,20 @@ parse_prs::production_rule export_production_rule(const prs::production_rule_set
 	result.force = attr.force;
 	result.pass = attr.pass;
 	if (not attr.assume.is_tautology()) {
-		result.assume = boolean::export_expression_xfactor<parse_prs::expression>(attr.assume, pr);
+		result.assume = export_expression_xfactor(attr.assume, pr);
 	}
-	if (attr.delay_max != attributes().delay_max) {
+	if (attr.delay_max != prs::attributes().delay_max) {
 		result.after = attr.delay_max;
 	}
 	result.implicant = export_guard(pr, net, value, attr, g, next, covered);
 	result.action.valid = true;
-	result.action.lvalue.push_back(boolean::export_net<parse_prs::expression>(net, pr));
+	result.action.left.push_back(export_expression(boolean::cube(net, 1), pr));
 	result.action.operation = value == 1 ? "+" : "-";
 	if (debug) cout << result.to_string() << endl;
 	return result;
 }
 
-parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, globals g)
-{
-	parse_prs::setup_expressions();
+parse_prs::production_rule_set export_production_rule_set(const prs::production_rule_set &pr, prs::globals g) {
 	parse_prs::production_rule_set result;
 	result.valid = true;
 
@@ -343,7 +477,7 @@ parse_prs::production_rule_set export_production_rule_set(const prs::production_
 	}
 
 	if (not g) {
-		g = globals(pr);
+		g = prs::globals(pr);
 	}
 
 	vector<int> stack, covered;
