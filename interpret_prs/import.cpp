@@ -38,7 +38,7 @@ bool BooleanExpressionImporter::is_lvalue(const parse_expression::expression &sy
 	return syntax.level >= expression_config::cfg->lvalueLevel;
 }
 
-std::string BooleanExpressionImporter::import_term(const parse_expression::expression::argument &syntax, tokenizer *tokens) const {
+std::string BooleanExpressionImporter::import_term(const parse_expression::expression::argument &syntax, tokenizer *tokens, int arg) const {
 	if (syntax.type < 0 or syntax.type >= (int)expression_config::cfg->literals.size() or not syntax.ptr) {
 		return "gnd";
 	}
@@ -203,7 +203,7 @@ boolean::cube BooleanCompositionImporter::import_assignment(const assignment &sy
 	return boolean::cube();
 }
 
-boolean::cover BooleanCompositionImporter::import_term(const parse_expression::expression::argument &syntax, tokenizer *tokens) const {
+boolean::cover BooleanCompositionImporter::import_term(const parse_expression::expression::argument &syntax, tokenizer *tokens, int arg) const {
 	if (syntax.type < 0 or syntax.type >= (int)expression_config::cfg->literals.size() or not syntax.ptr) {
 		return boolean::cover();
 	}
