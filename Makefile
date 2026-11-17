@@ -1,6 +1,6 @@
 NAME          = interpret_prs
-DEPEND        = prs boolean interpret_boolean parse_ucs parse_prs parse_spice parse_dot parse_expression parse common
-TEST_DEPEND   = prs boolean interpret_boolean parse_ucs parse_prs parse_spice parse_dot parse_expression parse common
+DEPEND        = prs boolean interpret_boolean parse_choy parse_prs parse_spice parse_dot parse_expression parse common
+TEST_DEPEND   = prs boolean interpret_boolean parse_choy parse_prs parse_spice parse_dot parse_expression parse common
 
 COVERAGE ?= 0
 
